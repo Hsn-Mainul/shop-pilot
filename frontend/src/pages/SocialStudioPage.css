@@ -1,0 +1,281 @@
+/* =========================================================
+   Social Studio Page Styles - Scoped CSS
+   ========================================================= */
+
+.social-presence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.social-presence-card {
+  border-radius: 18px;
+  padding: 1.15rem 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #bfdbfe;
+  background: #f0f7ff;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.social-presence-card.instagram {
+  border-color: #fbcfe8;
+  background: #fdf2f8;
+}
+
+.social-presence-card.tiktok {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.social-presence-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.social-presence-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: #0f172a;
+}
+
+.social-presence-sub {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.social-composer-card {
+  margin-bottom: 2rem;
+  min-height: auto;
+  background: #ffffff;
+}
+
+.social-composer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.social-composer-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.social-composer-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.social-composer-form {
+  gap: 1rem;
+}
+
+.social-channel-pills {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.social-channel-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1rem;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.social-channel-pill.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.social-channel-name {
+  text-transform: capitalize;
+}
+
+.social-channel-check {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.social-channel-muted {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #94a3b8;
+}
+
+.social-channel-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.8rem;
+}
+
+.social-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .social-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.social-field-label-flat {
+  margin: 0;
+}
+
+.social-field-label-gap {
+  margin-bottom: 0.5rem;
+}
+
+.social-image-preview-box {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.social-image-preview-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.social-image-preview-text {
+  font-size: 0.82rem;
+}
+
+.social-caption-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+}
+
+.social-ai-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.social-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.social-ai-btn:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.social-ai-btn.purple {
+  color: #7c3aed;
+  background: #faf5ff;
+  border-color: #ddd6fe;
+}
+
+.social-ai-btn.purple:hover:not(:disabled) {
+  background: #f3e8ff;
+}
+
+.social-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.social-brand-icon-sm {
+  width: 44px;
+  height: 44px;
+}
+
+.social-post-thumb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 1rem;
+}
+
+.social-post-thumb-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.social-post-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.social-post-thumb-more {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.social-post-thumb-count {
+  font-size: 0.8rem;
+}
+
+.social-post-body-wrap {
+  margin: 1rem 0 0.85rem 0;
+}
+
+.social-post-body-text {
+  font-size: 0.94rem;
+  color: #1e293b;
+  line-height: 1.5;
+  margin: 0;
+  font-weight: 500;
+}
+
+.channel-status-pill-rose {
+  background: #ffe4e6;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.channel-status-active-dot.rose {
+  background: #e11d48;
+}
+

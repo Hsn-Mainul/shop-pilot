@@ -1,0 +1,59 @@
+from fastapi import APIRouter
+
+from app.api.v1.endpoints import (
+    ai,
+    automation,
+    auth,
+    calls,
+    conversations,
+    customers,
+    delivery,
+    documents,
+    finance,
+    integrations,
+    loyalty,
+    media,
+    orders,
+    payments,
+    plan,
+    products,
+    saved_replies,
+    shops,
+    social_studio,
+    support,
+    system,
+    team_ops,
+    webhooks,
+    pages_ai,
+    system_admin,
+    app_pages,
+)
+
+api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(system.router)
+api_router.include_router(system_admin.router)
+api_router.include_router(auth.router)
+api_router.include_router(shops.router)
+api_router.include_router(products.router)
+api_router.include_router(customers.router)
+api_router.include_router(customers.reviews_router)
+api_router.include_router(conversations.router)
+api_router.include_router(saved_replies.router)
+api_router.include_router(calls.router)
+api_router.include_router(orders.router)
+api_router.include_router(payments.router)
+api_router.include_router(delivery.router)
+api_router.include_router(finance.router)
+api_router.include_router(documents.router)
+api_router.include_router(media.router)
+api_router.include_router(integrations.router)
+api_router.include_router(webhooks.router)
+api_router.include_router(automation.router)
+api_router.include_router(social_studio.router)
+api_router.include_router(loyalty.router)
+api_router.include_router(team_ops.router)
+api_router.include_router(plan.router)
+api_router.include_router(support.router)
+api_router.include_router(ai.router)
+api_router.include_router(pages_ai.router)
+api_router.include_router(app_pages.router)

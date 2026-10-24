@@ -1,0 +1,1131 @@
+/* =========================================================
+   Integrations Page Styles - Revechat Exact Subnav & Modern
+   ========================================================= */
+
+.reve-integrations-layout {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .reve-integrations-layout {
+    flex-direction: column;
+  }
+}
+
+/* Left Sub-Menu Navigation */
+.reve-integrations-subnav {
+  width: 250px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  position: sticky;
+  top: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+@media (max-width: 900px) {
+  .reve-integrations-subnav {
+    width: 100%;
+    position: static;
+  }
+}
+
+.reve-subnav-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.25rem 0.65rem 0.65rem;
+}
+
+.reve-subnav-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reve-subnav-btn svg {
+  color: #64748b;
+  stroke-width: 1.8;
+  flex-shrink: 0;
+}
+
+.reve-subnav-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.reve-subnav-btn:hover svg {
+  color: #1e293b;
+}
+
+.reve-subnav-btn.active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.reve-subnav-btn.active svg {
+  color: #2563eb;
+}
+
+/* Main Content Area */
+.reve-integrations-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.reve-content-header {
+  margin-bottom: 1.5rem;
+}
+
+.reve-content-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.35rem 0;
+}
+
+.reve-content-sub {
+  font-size: 0.88rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Social Media Channels Revechat Cards */
+.reve-channel-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+  padding: 1.35rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.reve-channel-card:hover {
+  border-color: #cbd5e1;
+}
+
+.reve-channel-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.reve-channel-card-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.reve-channel-card-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reve-channel-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.reve-channel-card-sub {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0.2rem 0 0 0;
+  line-height: 1.4;
+}
+
+.reve-channel-warning-icon {
+  color: #eab308;
+  flex-shrink: 0;
+}
+
+.reve-channel-success-icon {
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+/* Connect Action Box inside Card */
+.reve-connect-box {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.reve-btn-connect-fb {
+  background: #1877f2;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.15s ease;
+}
+
+.reve-btn-connect-fb:hover {
+  background: #166fe5;
+}
+
+.reve-connect-note {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Connected Facebook Multi-Page Box */
+.reve-fb-connected-box {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.reve-fb-connected-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.reve-fb-connected-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+  margin: 0;
+}
+
+.reve-fb-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.reve-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #bfdbfe;
+  background: #ffffff;
+  color: #2563eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reve-icon-btn:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+.reve-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reve-pages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.reve-page-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.reve-page-item:hover {
+  border-color: #cbd5e1;
+  background: #fafbfc;
+}
+
+.reve-page-info {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.reve-page-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #94a3b8;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.reve-page-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reve-page-category {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0.15rem 0 0 0;
+}
+
+.reve-page-toggles {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+
+.reve-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.84rem;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+}
+
+.reve-checkbox-input {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.reve-help-footer {
+  margin-top: 1.25rem;
+  font-size: 0.82rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.reve-help-link {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.reve-help-link:hover {
+  text-decoration: underline;
+}
+
+/* Facebook OAuth Simulation Dialog */
+.reve-oauth-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.reve-oauth-card {
+  background: #ffffff;
+  border-radius: 12px;
+  width: min(440px, 100%);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+}
+
+.reve-oauth-top-bar {
+  background: #1877f2;
+  color: #ffffff;
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.reve-oauth-body {
+  padding: 1.75rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.reve-oauth-user-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.reve-oauth-user-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.reve-oauth-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.reve-oauth-desc {
+  font-size: 0.86rem;
+  color: #475569;
+  margin: 0.25rem 0 0 0;
+  line-height: 1.45;
+}
+
+.reve-oauth-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.reve-oauth-btn-secondary {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 6px;
+  padding: 0.55rem 1.25rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.reve-oauth-btn-primary {
+  border: none;
+  background: #1877f2;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 0.55rem 1.4rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.reve-oauth-btn-primary:hover {
+  background: #166fe5;
+}
+
+.reve-oauth-switch-link {
+  font-size: 0.82rem;
+  color: #2563eb;
+  text-decoration: none;
+  cursor: pointer;
+  text-align: center;
+  display: block;
+}
+
+.channels-section-container {
+  margin-top: 0.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.channels-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.channels-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.channels-title-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563eb;
+}
+
+.channels-heading-text {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #334155;
+  margin: 0;
+}
+
+.live-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.85rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.live-sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+  animation: pulse-sync 2s infinite ease-in-out;
+}
+
+@keyframes pulse-sync {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+}
+
+.active-channels-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 960px) {
+  .active-channels-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.channel-card-modern {
+  background: linear-gradient(180deg, #f0f7ff 0%, #fbfdff 22%, #ffffff 45%);
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  padding: 1.65rem 1.75rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 400px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  position: relative;
+}
+
+.channel-card-modern:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 28px -4px rgba(15, 23, 42, 0.07), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
+}
+
+.channel-card-dialect {
+  min-height: 340px;
+}
+
+.channel-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.channel-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 0.95rem;
+}
+
+.channel-brand-icon-wrap {
+  width: 50px;
+  height: 50px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.channel-brand-icon-primary {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #2563eb;
+}
+
+.channel-brand-icon-slate {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.channel-brand-info h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.channel-brand-sub {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0.2rem 0 0 0;
+}
+
+.channel-status-pill-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.8rem;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #0284c7;
+}
+
+.channel-status-pill-emerald {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.channel-status-pill-amber {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.channel-status-active-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0284c7;
+}
+
+.channel-status-active-dot.emerald {
+  background: #16a34a;
+}
+
+.channel-status-active-dot.amber {
+  background: #d97706;
+}
+
+.channel-status-not-linked {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #94a3b8;
+  padding: 0.25rem 0;
+}
+
+.channel-usage-counter {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748b;
+  margin: 1.15rem 0 1rem 0;
+}
+
+.channel-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 1.5rem;
+}
+
+.channel-feature-bullet {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.885rem;
+  color: #334155;
+  font-weight: 450;
+}
+
+.channel-feature-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: #2563eb;
+}
+
+.channel-account-block {
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.channel-account-block-top {
+  margin-top: 1.25rem;
+}
+
+.channel-linked-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #2563eb;
+  margin: 0 0 0.55rem 0;
+}
+
+.channel-linked-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0.65rem 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.95rem;
+}
+
+.channel-account-profile {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.channel-avatar-wrapper {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: lowercase;
+  flex-shrink: 0;
+}
+
+.channel-avatar-online-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid #ffffff;
+}
+
+.channel-account-handle {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-left: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-trash-action {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  padding: 0.35rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.channel-trash-action:hover {
+  background: #fee2e2;
+  transform: scale(1.05);
+}
+
+.channel-btn-limit-reached {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  background: #fafafa;
+  color: #94a3b8;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: center;
+  cursor: not-allowed;
+  user-select: none;
+}
+
+.channel-limit-caption {
+  font-size: 0.8rem;
+  color: #64748b;
+  text-align: center;
+  margin: 0.75rem 0 0 0;
+  line-height: 1.4;
+}
+
+.channel-connect-button {
+  width: 100%;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.78rem 1.25rem;
+  font-size: 0.94rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.2);
+  transition: all 0.18s ease;
+}
+
+.channel-connect-button:hover {
+  background: #1d4ed8;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.3);
+  transform: translateY(-1px);
+}
+
+.channel-connect-button:active {
+  transform: translateY(0);
+}
+
+/* Sub-nav menu bar */
+.integrations-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1.75rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.integration-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-weight: 500;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.integration-tab-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.integration-tab-btn.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.integrations-demo-hint {
+  margin-bottom: 1.25rem;
+}
+
+.integrations-webhook-form {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.integrations-field-label {
+  margin: 0;
+}
+
+/* Modal styling for connecting TikTok / WhatsApp / Telegram */
+.channel-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.channel-modal-dialog {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 40px -8px rgba(15, 23, 42, 0.16);
+  width: min(480px, 100%);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.channel-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.channel-modal-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.channel-modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.channel-modal-sub {
+  margin: 2px 0 0 0;
+  font-size: 0.85rem;
+}
+
+.channel-modal-form {
+  gap: 1rem;
+}
+
+.channel-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.reve-connected-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reve-connected-status-text {
+  font-size: 0.85rem;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.reve-code-block {
+  background: #0f172a;
+  color: #38bdf8;
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.reve-forwarder-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  color: #2563eb;
+  margin-bottom: 1rem;
+}
+
+.reve-btn-group {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.reve-channel-card-sub-spaced {
+  margin-bottom: 1rem;
+}
+
+/* Instagram Revechat View Styles */
+.reve-ig-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reve-ig-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.5rem 1.75rem;
+}
+
+.reve-ig-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+@media (max-width: 680px) {
+  .reve-ig-account-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.reve-ig-account-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.reve-ig-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1.15rem;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+}
+
+.reve-ig-username {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.reve-ig-features-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.reve-ig-guideline-section {
+  margin-top: 1.75rem;
+}
+
+.reve-ig-guideline-header {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 1rem 0;
+}
+
+.reve-ig-guideline-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.reve-ig-guideline-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #334155;
+  margin: 0;
+}
+
+.reve-ig-guideline-link {
+  font-size: 0.88rem;
+  color: #2563eb;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-block;
+  width: fit-content;
+}
+
+.reve-ig-guideline-link:hover {
+  text-decoration: underline;
+}
+
+.reve-ig-help-footer {
+  margin-top: 1.5rem;
+  font-size: 0.88rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.reve-content-title-md {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.5rem 0;
+}

@@ -1,0 +1,104 @@
+/* =========================================================
+   Inbox Page Styles - Scoped CSS
+   ========================================================= */
+
+.inbox-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.inbox-status-select {
+  max-width: 180px;
+}
+
+.inbox-channel-select {
+  max-width: 180px;
+}
+
+.inbox-customer-select {
+  max-width: 220px;
+}
+
+.inbox-transcribe-btn {
+  margin-top: 6px;
+}
+
+.inbox-meta-note {
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.inbox-status-sent {
+  color: var(--good, #1a7f37);
+  font-weight: 500;
+}
+
+.inbox-status-failed {
+  color: var(--danger, #cf222e);
+  font-weight: 500;
+}
+
+.inbox-reply-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem 0;
+}
+
+.inbox-saved-reply-select {
+  max-width: 220px;
+}
+
+.inbox-assignee-select {
+  max-width: 180px;
+}
+
+.ai-suggest-draft-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1d4ed8 !important;
+  font-weight: 600 !important;
+  transition: all 0.15s ease;
+}
+
+.ai-suggest-draft-btn:hover:not(:disabled) {
+  background: #dbeafe !important;
+  border-color: #93c5fd !important;
+  color: #1e40af !important;
+}
+
+.inbox-attach-label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.inbox-file-input {
+  max-width: 180px;
+}
+
+.inbox-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inbox-media-wrap {
+  margin-top: 6px;
+}
+
+.inbox-media-img {
+  max-width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+.inbox-media-audio {
+  margin-top: 6px;
+}
