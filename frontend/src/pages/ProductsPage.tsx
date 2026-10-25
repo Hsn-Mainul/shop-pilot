@@ -41,6 +41,7 @@ export function ProductsPage() {
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
   const [photoUrl, setPhotoUrl] = useState('')
+  const [postLink, setPostLink] = useState('')
   const [stock, setStock] = useState('10')
   const [pageId, setPageId] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
@@ -63,6 +64,7 @@ export function ProductsPage() {
   const [editCategory, setEditCategory] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editPhotoUrl, setEditPhotoUrl] = useState('')
+  const [editPostLink, setEditPostLink] = useState('')
   const [editPageId, setEditPageId] = useState('')
 
   const shop = useQuery({ queryKey: ['shop'], queryFn: api.shop.me })
@@ -79,6 +81,7 @@ export function ProductsPage() {
     setCategory('')
     setDescription('')
     setPhotoUrl('')
+    setPostLink('')
     setStock('10')
     setPageId('')
   }
@@ -92,6 +95,7 @@ export function ProductsPage() {
         category: category || undefined,
         description: description || undefined,
         photo_url: photoUrl || undefined,
+        post_link: postLink || undefined,
         page_id: pageId || undefined,
         variants: [{ attributes: { size: 'default' }, stock_qty: Number(stock) || 0, reorder_point: 2 }],
       }),
@@ -115,6 +119,7 @@ export function ProductsPage() {
         category: editCategory || null,
         description: editDescription || null,
         photo_url: editPhotoUrl || null,
+        post_link: editPostLink || null,
         page_id: editPageId || null,
       })
     },
@@ -194,6 +199,7 @@ export function ProductsPage() {
     setEditCategory(p.category || '')
     setEditDescription(p.description || '')
     setEditPhotoUrl(p.photo_url || '')
+    setEditPostLink(p.post_link || '')
     setEditPageId(p.page_id || '')
   }
 
@@ -446,6 +452,10 @@ export function ProductsPage() {
             <Input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} />
           </label>
           <label className="field-label">
+            Facebook Post Link
+            <Input value={postLink} onChange={(e) => setPostLink(e.target.value)} />
+          </label>
+          <label className="field-label">
             Upload photo
             <Input type="file" accept="image/*" onChange={(e) => onPhotoFile(e.target.files?.[0] ?? null)} />
           </label>
@@ -498,6 +508,10 @@ export function ProductsPage() {
           <label className="field-label">
             Photo URL
             <Input value={editPhotoUrl} onChange={(e) => setEditPhotoUrl(e.target.value)} />
+          </label>
+          <label className="field-label">
+            Facebook Post Link
+            <Input value={editPostLink} onChange={(e) => setEditPostLink(e.target.value)} />
           </label>
           <label className="field-label">
             Upload new photo

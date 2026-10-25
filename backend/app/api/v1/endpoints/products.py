@@ -1,3 +1,4 @@
+import base64
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,7 +13,10 @@ from app.schemas.product import (
     BulkProductImportResult,
     ProductCreate,
     ProductOut,
+    ProductSearchRequest,
+    ProductSearchResult,
     ProductUpdate,
+    ProductVariantOut,
     StockAdjustRequest,
     StockLedgerOut,
 )
@@ -72,6 +76,102 @@ def create_product(
     except Exception:
         pass
     return product
+
+
+@router.post("/search", response_model=list[ProductSearchResult])
+def search_products(
+    payload: ProductSearchRequest,
+    current_user: TeamMember = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ProductSearchResult]:
+    """Unified product search: text query, price range, or image (base64).
+
+    All three input modes can be combined in a single request.
+    - text query: semantic vector search over name / category / description
+    - image: vision model describes the photo then searches the catalog
+    - price range: applied as a SQL filter before the vector search
+    """
+    from app.models.shop import Shop
+    from app.services.rag_service import search_knowledge_and_catalog
+
+    # Determine effective query text
+    query_text: str = payload.query or ""
+
+    # Image search: describe the photo then use the description as the query
+    if payload.image_base64:
+        try:
+            from app.integrations.llm import describe_photo
+
+            image_bytes = base64.b64decode(payload.image_base64)
+            description = describe_photo(image_bytes)
+            if description:
+                # Merge with any typed query so both signals are used
+                query_text = f"{query_text} {description}".strip() if query_text else description
+        except Exception:
+            pass  # fall through to text-only search if vision fails
+
+    if not query_text and payload.min_price is None and payload.max_price is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide at least one of: query, image_base64, min_price, or max_price.",
+        )
+
+    # If only a price range was given with no query text, use a generic query so
+    # the RAG retriever returns all in-budget products ranked by relevance.
+    effective_query = query_text or "product"
+
+    # Inject explicit price bounds into the query text so parse_price_range picks
+    # them up when the caller passes them as structured fields instead of free text.
+    if payload.min_price is not None and "above" not in effective_query.lower():
+        effective_query = f"{effective_query} above {payload.min_price}"
+    if payload.max_price is not None and "under" not in effective_query.lower():
+        effective_query = f"{effective_query} under {payload.max_price}"
+
+    shop_currency = db.query(Shop.currency).filter(Shop.id == current_user.shop_id).scalar() or "BDT"
+
+    results = search_knowledge_and_catalog(
+        db,
+        current_user.shop_id,
+        effective_query,
+        top_k_knowledge=0,       # caller only wants products
+        top_k_products=payload.top_k,
+        page_id=payload.page_id,
+        include_products=True,
+        currency=shop_currency,
+    )
+
+    # Enrich with full variant data for the frontend
+    product_ids = [p["id"] for p in results.get("products", [])]
+    if not product_ids:
+        return []
+
+    products_by_id: dict[uuid.UUID, Product] = {
+        p.id: p
+        for p in db.query(Product)
+        .options(selectinload(Product.variants))
+        .filter(Product.id.in_(product_ids))
+        .all()
+    }
+
+    out: list[ProductSearchResult] = []
+    for item in results.get("products", []):
+        prod = products_by_id.get(item["id"])
+        if prod is None:
+            continue
+        out.append(
+            ProductSearchResult(
+                id=prod.id,
+                name=prod.name,
+                category=prod.category,
+                price=float(prod.price),
+                description=prod.description,
+                photo_url=prod.photo_url,
+                post_link=getattr(prod, "post_link", None),
+                similarity=item["similarity"],
+                variants=[ProductVariantOut.model_validate(v) for v in prod.variants],
+            )
+        )
+    return out
 
 
 @router.post("/import", response_model=BulkProductImportResult, status_code=status.HTTP_201_CREATED)

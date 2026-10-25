@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 import logging
 
-from app.core.config import settings
 from app.models.plan import AICreditLedgerEntry, Plan, PlanCode, ShopSubscription
 from app.models.shop import Shop
 
@@ -79,8 +78,10 @@ def consume_text_credit(
     amount: float = 1.0,
     page_id: str | None = None,
 ) -> bool:
-    if settings.environment == "development":
-        return True
+    # Plan limits must always be enforced against the shop's real subscribed plan —
+    # previously this short-circuited to "unlimited" whenever settings.environment was
+    # "development" (the default with no .env override), which meant no customer's AI
+    # usage was ever actually capped, in demo or in production run this way.
     ensure_monthly_grant(db, shop_id)
     if _balance(db, shop_id, "text_credit") < amount:
         logger.warning("Shop %s has exhausted AI text credits (required: %s)", shop_id, amount)

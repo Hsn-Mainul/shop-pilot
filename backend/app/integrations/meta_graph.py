@@ -196,6 +196,69 @@ def send_messenger_text(page_id: str, page_access_token: str, recipient_id: str,
     return str(response.json().get("message_id") or response.json().get("id") or "")
 
 
+def fetch_page_posts_with_photos(page_id: str, page_access_token: str, limit: int = 25) -> list[dict]:
+    """Fetch the connected page's own actual recent posts that have a photo
+    attached — raw Meta data only (no matching/guessing here), for a caller
+    to pick the best match from. Captions may be in any language the page
+    actually posts in (e.g. Bangla), so matching needs real language
+    understanding, not done in this function.
+    """
+    try:
+        resp = httpx.get(
+            f"{settings.meta_graph_base_url}/{page_id}/posts",
+            params={
+                "access_token": page_access_token,
+                "fields": "message,full_picture,permalink_url",
+                "limit": limit,
+            },
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return []
+        posts = resp.json().get("data", [])
+    except Exception:
+        return []
+
+    return [
+        {
+            "message": p.get("message") or "",
+            "photo_url": p["full_picture"],
+            "permalink_url": p.get("permalink_url"),
+        }
+        for p in posts
+        if p.get("full_picture")
+    ]
+
+
+def send_messenger_image(page_id: str, page_access_token: str, recipient_id: str, image_url: str) -> str:
+    """Send an outbound Messenger / Instagram DM image attachment by URL — Meta
+    fetches and hosts the image itself, no upload needed on our side.
+
+    `is_reusable` is intentionally omitted (not set to True): we resolve each
+    product's photo_url fresh per request rather than needing Meta's long-term
+    attachment-ID caching, and repeatedly sending the same URL with
+    is_reusable=True is a known source of intermittent caching-layer errors
+    on Meta's side for the exact same URL that worked moments earlier.
+    """
+    response = httpx.post(
+        f"{settings.meta_graph_base_url}/{page_id}/messages",
+        json={
+            "recipient": {"id": recipient_id},
+            "messaging_type": "RESPONSE",
+            "message": {
+                "attachment": {
+                    "type": "image",
+                    "payload": {"url": image_url},
+                }
+            },
+        },
+        params={"access_token": page_access_token},
+        timeout=20.0,
+    )
+    response.raise_for_status()
+    return str(response.json().get("message_id") or response.json().get("id") or "")
+
+
 def reply_to_comment(comment_id: str, page_access_token: str, message: str) -> str:
     """Public reply on a Facebook/Instagram comment."""
     response = httpx.post(

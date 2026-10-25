@@ -32,6 +32,7 @@ class ProductBase(BaseModel):
     price: Decimal
     cost: Decimal | None = None
     photo_url: str | None = None
+    post_link: str | None = None
     kind: str = "product"  # product | service
     pricing_mode: str = "fixed"  # fixed | from | on_quote
     scheduling: dict = Field(default_factory=dict)
@@ -51,6 +52,7 @@ class ProductUpdate(BaseModel):
     price: Decimal | None = None
     cost: Decimal | None = None
     photo_url: str | None = None
+    post_link: str | None = None
     kind: str | None = None
     pricing_mode: str | None = None
     scheduling: dict | None = None
@@ -105,3 +107,42 @@ class BulkProductImportRequest(BaseModel):
 class BulkProductImportResult(BaseModel):
     created: int
     product_ids: list[uuid.UUID]
+
+
+# ---------------------------------------------------------------------------
+# Product search (chat + frontend)
+# ---------------------------------------------------------------------------
+
+class ProductSearchRequest(BaseModel):
+    """Flexible product search used by the frontend and the chat widget.
+
+    At least one of `query`, `image_base64`, `min_price`, or `max_price`
+    must be provided.
+    """
+
+    query: str | None = Field(None, description="Free-text search — name, category, or description keywords")
+    image_base64: str | None = Field(
+        None,
+        description=(
+            "Base64-encoded image the customer is searching by. "
+            "The backend describes it with the vision model and searches the catalog."
+        ),
+    )
+    min_price: float | None = Field(None, ge=0, description="Minimum price filter")
+    max_price: float | None = Field(None, ge=0, description="Maximum price filter")
+    page_id: str | None = Field(None, description="Restrict results to a specific connected page's catalog")
+    top_k: int = Field(10, ge=1, le=50, description="Maximum number of results to return")
+
+
+class ProductSearchResult(BaseModel):
+    id: uuid.UUID
+    name: str
+    category: str | None = None
+    price: float
+    description: str | None = None
+    photo_url: str | None = None
+    post_link: str | None = None
+    similarity: float
+    variants: list[ProductVariantOut] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}

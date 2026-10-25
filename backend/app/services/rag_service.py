@@ -13,6 +13,7 @@ reducing latency, and stopping hallucinations.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -48,6 +49,40 @@ def format_money(amount: Any, currency: str) -> str:
     return f"{symbol}{amount} ({currency})" if symbol else f"{amount} {currency}"
 
 
+_NUM = r"(\d[\d,]*(?:\.\d+)?)"
+
+
+def parse_price_range(text: str) -> tuple[float | None, float | None]:
+    """Pull a price range out of a free-text customer message, e.g.
+    'shirts under 1000 taka' -> (None, 1000.0), '500-1000 BDT' -> (500.0, 1000.0).
+    Returns (None, None) when no price constraint is mentioned.
+    """
+    q = text.lower()
+
+    def num(s: str) -> float:
+        return float(s.replace(",", ""))
+
+    m = re.search(rf"between\s+{_NUM}\s+(?:and|to|-)\s+{_NUM}", q)
+    if m:
+        a, b = num(m.group(1)), num(m.group(2))
+        return (min(a, b), max(a, b))
+
+    m = re.search(rf"{_NUM}\s*(?:-|to)\s*{_NUM}", q)
+    if m:
+        a, b = num(m.group(1)), num(m.group(2))
+        return (min(a, b), max(a, b))
+
+    m = re.search(rf"(?:under|below|less than|up ?to|within|max(?:imum)?)\s*{_NUM}", q)
+    if m:
+        return (None, num(m.group(1)))
+
+    m = re.search(rf"(?:over|above|more than|at least|min(?:imum)?)\s*{_NUM}", q)
+    if m:
+        return (num(m.group(1)), None)
+
+    return (None, None)
+
+
 def prepare_knowledge_text(item: AIKnowledgeItem) -> str:
     """Serialize a knowledge item into a dense search string."""
     cat_label = item.category.value if hasattr(item.category, "value") else str(item.category)
@@ -55,7 +90,11 @@ def prepare_knowledge_text(item: AIKnowledgeItem) -> str:
 
 
 def prepare_product_text(prod: Product, currency: str | None = None) -> str:
-    """Serialize a product with its variants and stock levels into a search string."""
+    """Serialize a product with its variants and stock levels into a search string.
+
+    The photo_url and post_link are included so the LLM can share them with the
+    customer when they ask to see a product image or its social-media post link.
+    """
     variant_details = []
     total_stock = 0
     for v in prod.variants or []:
@@ -74,8 +113,23 @@ def prepare_product_text(prod: Product, currency: str | None = None) -> str:
     currency_code = currency or getattr(getattr(prod, "shop", None), "currency", None) or "BDT"
     price_str = format_money(prod.price, currency_code)
 
+    discount_str = ""
+    if prod.discount_percent:
+        floor = prod.min_negotiable_price
+        if floor is None and prod.cost is not None:
+            floor = prod.cost
+        floor_str = f", never below {format_money(round(float(floor), 2), currency_code)}" if floor is not None else ""
+        discount_str = f" | Negotiable discount: up to {float(prod.discount_percent):.0f}% off{floor_str}"
+    else:
+        discount_str = " | No discount available on this item"
+
+    # Include media/link info so the LLM can share it when asked
+    photo_str = f" | Photo: {prod.photo_url}" if getattr(prod, "photo_url", None) else ""
+    post_link_str = f" | Post link: {prod.post_link}" if getattr(prod, "post_link", None) else ""
+
     return (
-        f"Product: {prod.name}{category_str} | Price: {price_str}{desc_str}{variants_str}"
+        f"Product: {prod.name}{category_str} | Price: {price_str}{desc_str}"
+        f"{variants_str}{discount_str}{photo_str}{post_link_str}"
     ).strip()
 
 
@@ -172,6 +226,7 @@ def search_knowledge_and_catalog(
     if not clean_query:
         return {"knowledge": [], "products": [], "mode": "empty"}
 
+    min_price, max_price = parse_price_range(clean_query) if include_products else (None, None)
     query_vec = get_embedding(clean_query)
 
     # 1. Search knowledge items
@@ -229,7 +284,16 @@ def search_knowledge_and_catalog(
             product_query = product_query.filter(
                 (Product.page_id == page_id) | (Product.page_id.is_(None))
             )
+        if min_price is not None:
+            product_query = product_query.filter(Product.price >= min_price)
+        if max_price is not None:
+            product_query = product_query.filter(Product.price <= max_price)
         products = product_query.all()
+        # A price constraint already narrows the SQL query a lot, and the query text
+        # ("under 1000 taka") often carries little semantic signal about *what* item
+        # is wanted, so don't also gate on similarity when one was given — surface
+        # every in-budget product, best-matching first.
+        effective_min_similarity = 0.0 if (min_price is not None or max_price is not None) else min_similarity
         if query_vec:
             for p in products:
                 sim = 0.0
@@ -240,7 +304,7 @@ def search_knowledge_and_catalog(
                     p_text = f"{p.name} {p.category or ''} {p.description or ''}".lower()
                     if any(w in p_text for w in clean_query.lower().split()):
                         sim = 0.40
-                if sim >= min_similarity:
+                if sim >= effective_min_similarity:
                     scored_products.append({
                         "id": p.id,
                         "name": p.name,

@@ -76,6 +76,7 @@ export interface Product {
   price: number
   cost: number | null
   photo_url: string | null
+  post_link: string | null
   kind: string
   pricing_mode: string
   scheduling: Record<string, unknown>

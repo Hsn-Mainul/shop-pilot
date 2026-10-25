@@ -136,6 +136,11 @@ def _clean_output_text(text: str) -> str:
     cleaned = re.sub(r"[\U00010000-\U0010ffff]", "", text)
     # Remove any stray system tags
     cleaned = re.sub(r"<(?:think|reasoning)>.*?</(?:think|reasoning)>", "", cleaned, flags=re.DOTALL)
+    # Unwrap URLs that the LLM wrapped in markdown bold/italic (e.g. *https://...*  or **https://...**).
+    # Messenger and WhatsApp need a bare URL to render it as a clickable hyperlink.
+    cleaned = re.sub(r"\*{1,2}(https?://[^\s*]+)\*{1,2}", r"\1", cleaned)
+    # Also unwrap Markdown link syntax [text](url) → url
+    cleaned = re.sub(r"\[([^\]]*)\]\((https?://[^\s)]+)\)", r"\2", cleaned)
     return cleaned.strip()
 
 
@@ -241,19 +246,47 @@ def build_shop_system_prompt(shop_name: str, knowledge_snippets: list[str]) -> s
         f"Key Instructions:\n"
         f"1. Language & Tone: If the message explicitly tells you which language to write in (e.g. "
         f"'Write entirely in English' or 'Write entirely in Bangla'), you MUST follow that instruction "
-        f"exactly and ignore any other language cues in the message. Otherwise, answer naturally and "
-        f"eloquently in the exact language the customer uses (Standard Bangla বাংলা, Banglish/Romanized "
-        f"Bangla, or English). Never use broken or distorted script.\n"
+        f"exactly and ignore any other language cues in the message. Otherwise, base your reply language on the "
+        f"customer's latest/current message specifically — a customer can switch languages mid-conversation, and "
+        f"earlier turns shown above may be in a different language than the current one; never let that older "
+        f"history pull your reply back into a language the customer has already moved on from. If their message is "
+        f"in genuine English, reply in English. If their message is in Standard Bangla script (বাংলা) OR in "
+        f"Banglish/Romanized Bangla (Bangla words spelled in English letters, e.g. 'amak dekhao', 'koto taka'), "
+        f"ALWAYS reply in proper Bangla script (বাংলা) — never reply back in Romanized/Banglish form yourself, even "
+        f"if the customer typed Banglish. Never use broken or distorted script.\n"
         f"2. Live Catalog & Pricing: Quote only the exact prices, sizes, and stock quantities provided in the Shop facts, "
         f"copying the currency symbol/code exactly as shown there (e.g. '৳499 (BDT)') — never substitute a different "
-        f"currency symbol such as ₹ or $. Never guess or hallucinate unlisted products or prices.\n"
+        f"currency symbol such as ₹ or $. Never guess or hallucinate unlisted products or prices. A fact starting with "
+        f"'Product:' is the live, authoritative catalog entry — ALWAYS use its price. A fact starting with 'Facebook "
+        f"post:' is just an old social post caption, which may mention an outdated or since-changed price; NEVER quote "
+        f"a price from a 'Facebook post:' fact if a 'Product:' fact exists for the same item, and never state a post's "
+        f"old price as if it were the current price. If two facts disagree, the 'Product:' entry wins, always.\n"
         f"3. Chat-to-Order & Memory: The conversation so far (if shown above the latest message) is real — read it "
         f"before replying. If the customer already gave the item, quantity, phone number, or delivery address in an "
         f"earlier message, do NOT ask for it again; only ask for whatever is still missing. Once item, quantity, "
-        f"phone, and address are all known, tell the customer their order is being placed — a separate system will "
-        f"confirm it with a reference number right after your reply.\n"
+        f"phone, and address are all known, say ONLY something brief and provisional like 'Thanks, I'm placing your "
+        f"order now' — NEVER write 'order received', 'order confirmed', 'order recorded', a receipt-style item/price/"
+        f"total breakdown, or any other wording implying the order already exists. You do not create the order and "
+        f"cannot know if it succeeded — a separate system does that and appends its own confirmation with a real "
+        f"invoice number right after your reply, only if it actually succeeds. If your reply claims an order is "
+        f"confirmed but no invoice number follows, the customer has been told something false.\n"
         f"4. Shop Policies: Answer delivery fees, COD (Cash on Delivery), return policies, and opening hours strictly based on the facts below.\n"
-        f"5. Hallucination Control: If any detail is not covered in the facts below, politely state that you do not have that specific information.\n\n"
+        f"5. Discounts & Negotiation: Only offer or discuss a discount on an item if the facts below explicitly list "
+        f"'Negotiable discount' for it, and never go beyond the percentage/floor stated there. If a customer asks for "
+        f"a discount on an item marked 'No discount available', politely say this item has no discount right now — "
+        f"never invent one or go lower on your own.\n"
+        f"6. Product Photos & Post Links: NEVER write out, paste, or mention a 'Photo:' URL from the facts below in "
+        f"your reply text, in any language. If the customer asks to see a photo, do NOT say anything at all about "
+        f"sending, forwarding, attaching, or the system handling it — not 'I'm sending it', not 'here it is', not "
+        f"'the system will attach it shortly', nothing about a photo being on its way in any form of words. You have "
+        f"no way of knowing whether a photo will actually be sent, so mentioning it at all risks promising something "
+        f"that doesn't happen. Simply skip the topic of the photo entirely and answer the customer's other questions "
+        f"about the item (price, stock, size) normally, as if they hadn't mentioned a photo. A separate system "
+        f"decides on its own whether to send one. If a 'Post link:' fact exists and the customer asks for the "
+        f"post/link, you MAY copy that exact URL as a plain bare URL with no markdown formatting — that one is a "
+        f"public Facebook post link meant to be shared. If neither fact is present for that product, say you don't "
+        f"have it saved — NEVER invent or guess a URL.\n"
+        f"7. Hallucination Control: If any detail is not covered in the facts below, politely state that you do not have that specific information.\n\n"
         f"Shop Facts & Live Data:\n{facts}"
     )
 
@@ -287,11 +320,28 @@ def build_page_system_prompt(page_profile: Any, knowledge_snippets: list[str]) -
         catalog_rules = (
             "2. Live Catalog & Pricing: Quote exact items, prices, and quantities provided in the facts, copying the "
             "currency symbol/code exactly as shown there (e.g. '৳499 (BDT)') — never substitute a different currency "
-            "symbol such as ₹ or $. Never hallucinate unlisted items.\n"
+            "symbol such as ₹ or $. Never hallucinate unlisted items. A fact starting with 'Product:' is the live, "
+            "authoritative catalog entry — ALWAYS use its price. A fact starting with 'Facebook post:' is just an old "
+            "social post caption that may mention an outdated price; NEVER quote a price from a 'Facebook post:' fact "
+            "if a 'Product:' fact exists for the same item — the 'Product:' entry always wins.\n"
             "3. Chat-to-Order & Memory: The conversation so far (if shown above the latest message) is real — read it "
             "before replying. If the customer already gave the item, quantity, phone, or address earlier, do not ask "
-            "again; only ask for what's still missing. Once all four are known, tell them their order is being "
-            "placed — a separate system will confirm it with a reference number right after your reply.\n"
+            "again; only ask for what's still missing. Once all four are known, say ONLY something brief and "
+            "provisional like 'Thanks, I'm placing your order now' — NEVER write 'order received', 'order confirmed', "
+            "'order recorded', a receipt-style item/price/total breakdown, or anything implying the order already "
+            "exists. You do not create the order and cannot know if it succeeded — a separate system does that and "
+            "appends its own confirmation with a real invoice number right after your reply, only if it succeeds.\n"
+            "3b. Discounts & Negotiation: Only offer a discount on an item if the facts explicitly list 'Negotiable "
+            "discount' for it, and never exceed the percentage/floor stated there. For items marked 'No discount "
+            "available', say so politely and don't invent one.\n"
+            "3c. Product Photos & Post Links: NEVER write out or mention a 'Photo:' URL from the facts in your reply "
+            "text, in any language. If asked to see a photo, say NOTHING about sending, forwarding, attaching, or "
+            "the system handling it — not 'sending it', not 'here it is', not 'it'll be attached shortly', nothing. "
+            "You cannot know if a photo will actually be sent. Just skip the topic entirely and answer other "
+            "questions about the item normally, as if they hadn't mentioned a photo — a separate system decides on "
+            "its own whether to send one. If a 'Post link:' fact exists and they ask for the post/link, you MAY copy "
+            "that exact URL as a plain bare URL with no markdown — that one is a public Facebook post link meant to "
+            "be shared. If neither fact is present, say you don't have it saved — NEVER invent or guess a URL.\n"
         )
     else:
         catalog_rules = (
@@ -308,8 +358,13 @@ def build_page_system_prompt(page_profile: Any, knowledge_snippets: list[str]) -
         f"Core Directives for this Page:\n"
         f"{custom_inst}\n\n"
         f"Key Rules:\n"
-        f"1. Language & Precision: Answer naturally, fluently, and grammatically in the exact language used by the visitor "
-        f"(Standard Bangla বাংলা, Banglish, or English). Never generate broken phonetic or distorted characters.\n"
+        f"1. Language & Precision: Base your reply language on the visitor's latest/current message specifically — a "
+        f"visitor can switch languages mid-conversation, and earlier turns shown above may be in a different "
+        f"language than the current one; never let that older history pull your reply back into a language the "
+        f"visitor has already moved on from. If their message is genuine English, reply in English. If it's Standard "
+        f"Bangla script (বাংলা) OR Banglish/Romanized Bangla (Bangla words spelled in English letters), ALWAYS reply "
+        f"in proper Bangla script (বাংলা) — never reply back in Romanized/Banglish form yourself. Never generate "
+        f"broken phonetic or distorted characters.\n"
         f"{catalog_rules}"
         f"3. Dos & Don'ts:\n{dos_donts}\n"
         f"4. Hallucination Control: Answer strictly using verified page facts. If any detail is unknown, "
@@ -318,7 +373,7 @@ def build_page_system_prompt(page_profile: Any, knowledge_snippets: list[str]) -
     )
 
 
-def _describe_photo(image_bytes: bytes) -> str | None:
+def describe_photo(image_bytes: bytes) -> str | None:
     """Ask the local vision model for a short, plain factual description of
     the photo only — no persona, tone, language, or hashtag constraints.
 
@@ -380,7 +435,7 @@ def generate_social_caption(
 
     photo_line = None
     if image_bytes:
-        description = _describe_photo(image_bytes)
+        description = describe_photo(image_bytes)
         if description:
             photo_line = f"What the attached photo actually shows: {description}\n"
         else:
@@ -408,3 +463,79 @@ def generate_social_caption(
     )
 
     return chat_completion("You are a social media copywriter for retail brands.", prompt, max_tokens=220)
+
+
+_SCRIPT_RANGES: dict[str, re.Pattern[str]] = {
+    "bangla": re.compile(r"[ঀ-৿]"),
+    "devanagari": re.compile(r"[ऀ-ॿ]"),  # Hindi
+    "arabic": re.compile(r"[؀-ۿ]"),  # Urdu
+}
+
+_SCRIPT_NAMES = {
+    "bangla": "Bangla (বাংলা script)",
+    "devanagari": "Hindi (Devanagari script)",
+    "arabic": "Urdu (Arabic script)",
+}
+
+
+def _detect_script(text: str) -> str:
+    # Currency symbols (e.g. '৳' U+09F3) fall inside these same Unicode blocks as
+    # actual script letters, so a plain English reply quoting a BDT price would
+    # otherwise be misdetected as Bangla. Strip known currency symbols first.
+    cleaned = re.sub(r"[৳₹₨]", "", text)
+    for name, pattern in _SCRIPT_RANGES.items():
+        if pattern.search(cleaned):
+            return name
+    return "latin"
+
+
+_BANGLISH_MARKERS = re.compile(
+    r"\b(ami|apni|apnar|tumi|tomar|amar|amak|tomak|ache|nai|bhalo|valo|dhonnobad|"
+    r"koto|taka|lagbe|chai|chan|dekhao|dekhan|kemon|kobe|kothay|korbo|korte|"
+    r"korchi|hobe|hoy|deben|den|diben|kinbo|kinte|nite|niye|aschi|jacchi|bolo|"
+    r"bolen|kori|korle|jonno|ekta|koyta|kivabe|ki)\b",
+    re.I,
+)
+
+
+def _expected_reply_script(customer_message: str) -> str:
+    """What script the reply should be in, given the customer's message.
+
+    Bangla and Banglish (Bangla written in Latin letters, e.g. 'amak dekhao')
+    both expect a reply in proper Bangla script — only genuine English should
+    get an English reply. Since Banglish shares the same character set as
+    English, script detection alone can't tell them apart; a small set of
+    common Bangla function words (spelled in Latin) is used instead.
+    """
+    script = _detect_script(customer_message)
+    if script != "latin":
+        return script
+    return "bangla" if _BANGLISH_MARKERS.search(customer_message) else "latin"
+
+
+def enforce_reply_language(reply: str, latest_customer_message: str) -> str:
+    """Deterministic safety net on top of the system-prompt language rule.
+
+    With a long, mixed-language conversation history, the model sometimes
+    drifts back into an earlier turn's language even when told to follow
+    only the latest message — this catches that by comparing scripts and
+    force-rewriting the reply (preserving its content) when they disagree,
+    rather than just hoping the prompt instruction holds every time.
+    """
+    customer_script = _expected_reply_script(latest_customer_message)
+    reply_script = _detect_script(reply)
+    if customer_script == reply_script:
+        return reply
+
+    target = "English" if customer_script == "latin" else _SCRIPT_NAMES[customer_script]
+    prompt = (
+        f"Rewrite the following reply entirely in {target}, keeping the exact same meaning, product "
+        f"details, prices, and tone. Reply with ONLY the rewritten text — no preamble, no quotes.\n\n{reply}"
+    )
+    try:
+        rewritten = chat_completion("You are a precise translator and copy editor.", prompt, max_tokens=400)
+        cleaned = _clean_output_text(rewritten)
+        return cleaned or reply
+    except Exception:
+        logger.warning("Reply-language enforcement rewrite failed, keeping original reply", exc_info=True)
+        return reply

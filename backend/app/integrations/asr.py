@@ -45,13 +45,15 @@ def transcribe_audio_file(
 ) -> tuple[str, float]:
     """Returns (transcript_text, confidence_estimate)."""
     if not settings.asr_configured:
-        raise ASRNotConfiguredError("No ASR API key configured (settings.asr_api_key)")
+        raise ASRNotConfiguredError(
+            "No ASR API key configured — set ASR_API_KEY, or configure GROQ_API_KEY which this falls back to"
+        )
 
     lang, prompt, confidence = resolve_dialect_profile(dialect_code)
     if language_hint and not lang:
         lang = language_hint
 
-    data: dict[str, str] = {"model": settings.asr_model}
+    data: dict[str, str] = {"model": settings.effective_asr_model}
     if lang:
         data["language"] = lang
     if prompt:
@@ -59,8 +61,8 @@ def transcribe_audio_file(
 
     with open(file_path, "rb") as f:
         response = httpx.post(
-            f"{settings.asr_base_url}/audio/transcriptions",
-            headers={"Authorization": f"Bearer {settings.asr_api_key}"},
+            f"{settings.effective_asr_base_url}/audio/transcriptions",
+            headers={"Authorization": f"Bearer {settings.effective_asr_api_key}"},
             data=data,
             files={"file": f},
             timeout=60.0,

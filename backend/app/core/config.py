@@ -117,8 +117,26 @@ class Settings(BaseSettings):
         return False
 
     @property
+    def effective_asr_api_key(self) -> str | None:
+        # Reuse the Groq key already configured for chat, rather than requiring a second,
+        # separate ASR_API_KEY — Groq serves an OpenAI-compatible Whisper endpoint too.
+        return self.asr_api_key or self.effective_groq_api_key
+
+    @property
+    def effective_asr_base_url(self) -> str:
+        if self.asr_api_key:
+            return self.asr_base_url
+        return "https://api.groq.com/openai/v1" if self.effective_groq_api_key else self.asr_base_url
+
+    @property
+    def effective_asr_model(self) -> str:
+        if self.asr_api_key:
+            return self.asr_model
+        return "whisper-large-v3-turbo" if self.effective_groq_api_key else self.asr_model
+
+    @property
     def asr_configured(self) -> bool:
-        return bool(self.asr_api_key)
+        return bool(self.effective_asr_api_key)
 
     @property
     def twilio_configured(self) -> bool:

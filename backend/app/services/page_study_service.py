@@ -74,14 +74,21 @@ def fetch_meta_page_metadata(
             f"{base_url}/{page_id}/feed",
             params={
                 "access_token": page_access_token,
-                "fields": "message,created_time",
+                "fields": "id,message,created_time,permalink_url",
                 "limit": posts_limit,
             },
             timeout=10.0,
         )
         if feed_resp.status_code == 200:
             posts = feed_resp.json().get("data", [])
-            data["recent_posts"] = [p.get("message") for p in posts if p.get("message")]
+            # Keep the real permalink_url Meta returns for each post, scoped to this
+            # exact connected page — never guessed/constructed, so a link trained from
+            # here always points at an actual post on the page the seller selected.
+            data["recent_posts"] = [
+                {"message": p.get("message"), "permalink_url": p.get("permalink_url")}
+                for p in posts
+                if p.get("message")
+            ]
         else:
             logger.warning(
                 "Meta Graph feed fetch for page %s returned %s: %s",
@@ -94,7 +101,7 @@ def fetch_meta_page_metadata(
 
 
 def ingest_page_posts_as_knowledge(
-    db: Session, shop_id: uuid.UUID, page_id: str, posts: list[str]
+    db: Session, shop_id: uuid.UUID, page_id: str, posts: list[str | dict[str, Any]]
 ) -> int:
     """Turn each of the Page's own post captions into a searchable knowledge fact.
 
@@ -104,29 +111,41 @@ def ingest_page_posts_as_knowledge(
     without this, the AI only knows whatever was manually typed in as a fact.
     Safe to call repeatedly: already-ingested posts (matched by exact content)
     are skipped, so re-running only picks up genuinely new posts.
+
+    `posts` items are either a plain string (legacy/no link available) or a
+    dict `{"message": ..., "permalink_url": ...}` from `fetch_meta_page_metadata`
+    — when a permalink_url is present, it's the real URL Meta returned for that
+    exact post on this exact connected page, stored alongside the fact so the
+    AI can hand customers the actual post link instead of inventing one.
     """
+    # Dedup in Python, not SQL exact-match, since stored content may now carry an
+    # appended "Post link: ..." suffix the raw post_text won't have.
+    existing_contents = [
+        c
+        for (c,) in db.query(AIKnowledgeItem.content)
+        .filter(AIKnowledgeItem.shop_id == shop_id, AIKnowledgeItem.page_id == page_id)
+        .all()
+    ]
+
     created = 0
-    for post_text in posts:
-        post_text = (post_text or "").strip()
+    for post in posts:
+        if isinstance(post, dict):
+            post_text = (post.get("message") or "").strip()
+            permalink = (post.get("permalink_url") or "").strip() or None
+        else:
+            post_text = (post or "").strip()
+            permalink = None
         if not post_text or len(post_text) < 8:
             continue
-        existing_post = (
-            db.query(AIKnowledgeItem)
-            .filter(
-                AIKnowledgeItem.shop_id == shop_id,
-                AIKnowledgeItem.page_id == page_id,
-                AIKnowledgeItem.content == post_text,
-            )
-            .first()
-        )
-        if existing_post:
+        if any(c == post_text or c.startswith(post_text + "\n\n") for c in existing_contents):
             continue
+        content = f"{post_text}\n\nPost link: {permalink}" if permalink else post_text
         post_item = AIKnowledgeItem(
             shop_id=shop_id,
             page_id=page_id,
             category=KnowledgeCategory.SHOP_FACT,
             title=f"Facebook post: {post_text[:60].strip()}",
-            content=post_text,
+            content=content,
             is_pending_approval=False,
         )
         db.add(post_item)
@@ -173,7 +192,10 @@ def generate_page_study_with_ai(
     bio = meta_details.get("bio") or ""
     mission = meta_details.get("mission") or ""
     recent_posts = meta_details.get("recent_posts") or []
-    posts_text = "\n- ".join(recent_posts[:6]) if recent_posts else "(No public posts found)"
+    post_messages = [
+        (p.get("message") or "") if isinstance(p, dict) else (p or "") for p in recent_posts
+    ]
+    posts_text = "\n- ".join(m for m in post_messages[:6] if m) if post_messages else "(No public posts found)"
 
     page_content_summary = (
         f"Page Name: {page_name}\n"

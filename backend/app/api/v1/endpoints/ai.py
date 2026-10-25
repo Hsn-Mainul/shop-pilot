@@ -11,6 +11,7 @@ from app.integrations.llm import (
     LLMNotConfiguredError,
     build_shop_system_prompt,
     chat_completion,
+    enforce_reply_language,
     generate_social_caption,
 )
 from app.models.ai_knowledge import AIKnowledgeItem
@@ -168,6 +169,7 @@ def _answer_from_shop_knowledge(
         # search query above, so retrieval relevance isn't diluted by old text.
         user_message = f"{history}\nCustomer (latest message): {message}" if history else message
         reply = chat_completion(system_prompt, user_message)
+        reply = enforce_reply_language(reply, message)
         if return_sources:
             return reply, used_k_ids, used_p_ids
         return reply

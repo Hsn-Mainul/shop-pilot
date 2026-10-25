@@ -20,7 +20,12 @@ class Product(UUIDMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[float] = mapped_column(Numeric(12, 2))
     cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
-    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Text, not VARCHAR(500): Facebook's own CDN photo URLs routinely exceed 500 chars
+    # once their signed query-string params are included (seen in practice at 700+ chars).
+    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # URL of the social-media post where this product was advertised (e.g. a FB post link).
+    # The AI shares this when a customer asks "can you send me the post?" or "post link?".
+    post_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     # product | service (FR-CAT services catalogue)
     kind: Mapped[str] = mapped_column(String(20), default="product")
     # fixed | from | on_quote — mainly for services
@@ -29,6 +34,12 @@ class Product(UUIDMixin, TimestampMixin, Base):
     scheduling: Mapped[dict] = mapped_column(JSONB, default=dict)
     track_serial: Mapped[bool] = mapped_column(default=False)
     track_batch: Mapped[bool] = mapped_column(default=False)
+    # Seller-set discount the AI may offer/negotiate in chat for this product.
+    # Both null = no discount exists, so the AI tells the customer there isn't one.
+    discount_percent: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # Floor price the AI must never negotiate below (defaults to `cost` at the API layer
+    # when not set, so the AI can never talk a customer below what the item cost the seller).
+    min_negotiable_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     # Dense vector representation of product title, category, description, and variants
     embedding: Mapped[list[float] | None] = mapped_column(JSONB, nullable=True)
 
