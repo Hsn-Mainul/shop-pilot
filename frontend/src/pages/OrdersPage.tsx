@@ -143,18 +143,17 @@ export function OrdersPage() {
         }
       />
 
-      <div className="row tabs">
-        {STATUSES.map((s) => (
-          <Button
-            key={s}
-            size="sm"
-            variant={filter === s ? 'primary' : 'secondary'}
-            onClick={() => setFilter(filter === s ? '' : s)}
-          >
-            {statusLabel(s)}
-          </Button>
-        ))}
-      </div>
+      <label className="field-label" style={{ maxWidth: 240 }}>
+        Status
+        <Select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="">All statuses</option>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {statusLabel(s)}
+            </option>
+          ))}
+        </Select>
+      </label>
 
       <Panel title={t('orders')}>
           {orders.isLoading ? (
@@ -179,8 +178,12 @@ export function OrdersPage() {
               <tbody>
                 {orders.data.map((o) => (
                   <tr key={o.id}>
-                    <td>{shortId(o.id)}</td>
-                    <td>{shortId(o.customer_id)}</td>
+                    <td>{o.invoice_number || shortId(o.id)}</td>
+                    <td>
+                      {o.customer_name && !/^\d{10,}$/.test(o.customer_name)
+                        ? o.customer_name
+                        : shortId(o.customer_id)}
+                    </td>
                     <td>
                       <Badge>{statusLabel(o.status)}</Badge>
                     </td>

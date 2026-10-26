@@ -68,27 +68,39 @@ def fetch_meta_page_metadata(
     except Exception as exc:
         logger.warning("Failed to fetch page profile from Meta Graph for %s: %s", page_id, exc)
 
-    # 2. Page Feed / Posts
+    # 2. Page Feed / Posts — fetch message, permalink, and the first attached photo
     try:
         feed_resp = httpx.get(
             f"{base_url}/{page_id}/feed",
             params={
                 "access_token": page_access_token,
-                "fields": "id,message,created_time,permalink_url",
+                "fields": "id,message,created_time,permalink_url,attachments{media{image{src}},type}",
                 "limit": posts_limit,
             },
             timeout=10.0,
         )
         if feed_resp.status_code == 200:
             posts = feed_resp.json().get("data", [])
-            # Keep the real permalink_url Meta returns for each post, scoped to this
-            # exact connected page — never guessed/constructed, so a link trained from
-            # here always points at an actual post on the page the seller selected.
-            data["recent_posts"] = [
-                {"message": p.get("message"), "permalink_url": p.get("permalink_url")}
-                for p in posts
-                if p.get("message")
-            ]
+            # Keep the real permalink_url Meta returns for each post plus the first
+            # attached photo URL so products auto-created from posts get a photo too.
+            result_posts = []
+            for p in posts:
+                if not p.get("message"):
+                    continue
+                photo_url: str | None = None
+                attachments = (p.get("attachments") or {}).get("data") or []
+                for att in attachments:
+                    media = (att.get("media") or {}).get("image") or {}
+                    src = media.get("src")
+                    if src:
+                        photo_url = src
+                        break
+                result_posts.append({
+                    "message": p.get("message"),
+                    "permalink_url": p.get("permalink_url"),
+                    "photo_url": photo_url,
+                })
+            data["recent_posts"] = result_posts
         else:
             logger.warning(
                 "Meta Graph feed fetch for page %s returned %s: %s",
@@ -100,10 +112,149 @@ def fetch_meta_page_metadata(
     return data
 
 
+# ---------------------------------------------------------------------------
+# LLM prompt for extracting product data from a single post caption
+# ---------------------------------------------------------------------------
+_PRODUCT_EXTRACTION_PROMPT = (
+    "You extract product listings from a social media post caption written by a shop or seller. "
+    "The caption may be in Bangla, Banglish (Romanized Bangla), or English.\n\n"
+    "Return STRICT JSON only (no markdown, no backticks):\n"
+    "{\n"
+    '  "has_product": boolean,\n'
+    '  "products": [\n'
+    '    {\n'
+    '      "name": "product name (translate to English if needed, keep concise)",\n'
+    '      "price": number or null,\n'
+    '      "description": "1-2 sentence description from the caption, or null",\n'
+    '      "category": "inferred category (e.g. clothing, food, electronics) or null"\n'
+    '    }\n'
+    '  ]\n'
+    "}\n\n"
+    "Rules:\n"
+    "- Set has_product=false if the post is not selling anything (announcements, memes, news, etc.).\n"
+    "- Only extract products that are clearly for sale with a name. Price can be null if not stated.\n"
+    "- Do not invent details. Use only what is in the caption.\n"
+    "- A single post may contain multiple products — list them all."
+)
+
+
+def extract_products_from_post(post_text: str) -> list[dict[str, Any]]:
+    """Ask the LLM to extract product listings from a post caption.
+
+    Returns a list of dicts with keys: name, price, description, category.
+    Returns [] if the post contains no product listings or the LLM call fails.
+    """
+    try:
+        from app.integrations.llm import LLMNotConfiguredError
+
+        raw = chat_completion(_PRODUCT_EXTRACTION_PROMPT, post_text, max_tokens=400)
+        logger.debug("Product extraction raw LLM response: %r", raw[:300])
+        cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        data = json.loads(cleaned)
+        if not isinstance(data, dict) or not data.get("has_product"):
+            logger.debug("Post has no product (has_product=false or bad shape): %r", raw[:120])
+            return []
+        products = [p for p in (data.get("products") or []) if p.get("name")]
+        logger.info("Extracted %d product(s) from post: %s", len(products), [p.get("name") for p in products])
+        return products
+    except json.JSONDecodeError as exc:
+        logger.warning("Product extraction JSON parse failed: %s — raw: %r", exc, raw[:200] if "raw" in dir() else "N/A")
+        return []
+    except Exception as exc:
+        logger.warning("Product extraction from post failed: %s", exc, exc_info=True)
+        return []
+
+
+def sync_products_from_published_post(
+    db: Session,
+    shop_id: uuid.UUID,
+    page_id: str | None,
+    caption: str,
+    photo_url: str | None = None,
+    post_link: str | None = None,
+) -> int:
+    """When a merchant publishes a new post from Social Studio, check whether it's
+    actually selling something and, if so, add/update the matching catalog Product
+    — a post that isn't about a product (an announcement, a greeting, etc.) must
+    never create one. Mirrors the same extraction+backfill logic used when
+    training the AI from the page's existing posts, just run at publish time
+    instead of only when re-fetching old posts.
+    """
+    if not caption or not caption.strip():
+        return 0
+
+    extracted = extract_products_from_post(caption)
+    if not extracted:
+        return 0
+
+    existing_products_by_name = {
+        p.name.strip().casefold(): p
+        for p in db.query(Product).filter(
+            Product.shop_id == shop_id,
+            (Product.page_id == page_id) | (Product.page_id.is_(None)),
+        )
+    }
+
+    synced = 0
+    for ep in extracted:
+        pname = (ep.get("name") or "").strip()
+        if not pname:
+            continue
+
+        existing_product = existing_products_by_name.get(pname.casefold())
+        if existing_product is not None:
+            backfilled = False
+            if photo_url and not existing_product.photo_url:
+                existing_product.photo_url = photo_url
+                backfilled = True
+            if post_link and not existing_product.post_link:
+                existing_product.post_link = post_link
+                backfilled = True
+            if backfilled:
+                db.add(existing_product)
+                db.flush()
+                index_product(db, existing_product)
+                synced += 1
+            continue
+
+        price_raw = ep.get("price")
+        try:
+            price = float(price_raw) if price_raw is not None else 0.0
+        except (TypeError, ValueError):
+            price = 0.0
+
+        product = Product(
+            shop_id=shop_id,
+            page_id=page_id,
+            name=pname,
+            price=price,
+            description=ep.get("description") or None,
+            category=ep.get("category") or None,
+            photo_url=photo_url or None,
+            post_link=post_link or None,
+            kind="product",
+        )
+        product.variants = [ProductVariant(attributes={"size": "default"}, stock_qty=0, reorder_point=2)]
+        db.add(product)
+        db.flush()
+        index_product(db, product)
+        existing_products_by_name[pname.casefold()] = product
+        synced += 1
+        logger.info(
+            "Auto-created product '%s' (price=%.2f) from newly published post for shop %s / page %s",
+            pname, price, shop_id, page_id,
+        )
+
+    db.commit()
+    return synced
+
+
 def ingest_page_posts_as_knowledge(
     db: Session, shop_id: uuid.UUID, page_id: str, posts: list[str | dict[str, Any]]
 ) -> int:
-    """Turn each of the Page's own post captions into a searchable knowledge fact.
+    """Turn each of the Page's own post captions into a searchable knowledge fact,
+    and auto-create Product records for any listings detected in the post text.
 
     A post often names real items, prices, and delivery terms directly in the
     caption (e.g. "T-shirt available, price 330", regional courier charges)
@@ -127,33 +278,178 @@ def ingest_page_posts_as_knowledge(
         .all()
     ]
 
+    # Existing products for this page, keyed by case-insensitive name — include both
+    # page-specific AND shared (page_id IS NULL) products so a product already added
+    # manually doesn't get duplicated from a post. Keeping the actual Product (not just
+    # its name) lets a re-run backfill a missing photo_url/post_link onto a product that
+    # was created before this feature could fetch post photos, instead of only ever
+    # skipping it as "already exists" and leaving it permanently without a photo.
+    existing_products_by_name = {
+        p.name.strip().casefold(): p
+        for p in db.query(Product).filter(
+            Product.shop_id == shop_id,
+            (Product.page_id == page_id) | (Product.page_id.is_(None)),
+        )
+    }
+
     created = 0
+    products_created = 0
     for post in posts:
         if isinstance(post, dict):
             post_text = (post.get("message") or "").strip()
             permalink = (post.get("permalink_url") or "").strip() or None
+            post_photo = (post.get("photo_url") or "").strip() or None
         else:
             post_text = (post or "").strip()
             permalink = None
+            post_photo = None
         if not post_text or len(post_text) < 8:
             continue
-        if any(c == post_text or c.startswith(post_text + "\n\n") for c in existing_contents):
-            continue
-        content = f"{post_text}\n\nPost link: {permalink}" if permalink else post_text
-        post_item = AIKnowledgeItem(
-            shop_id=shop_id,
-            page_id=page_id,
-            category=KnowledgeCategory.SHOP_FACT,
-            title=f"Facebook post: {post_text[:60].strip()}",
-            content=content,
-            is_pending_approval=False,
+
+        already_ingested = any(
+            c == post_text or c.startswith(post_text + "\n\n") for c in existing_contents
         )
-        db.add(post_item)
-        db.flush()
-        index_knowledge_item(db, post_item)
-        created += 1
+
+        if not already_ingested:
+            # 1. Store as knowledge fact (only for new posts)
+            content = f"{post_text}\n\nPost link: {permalink}" if permalink else post_text
+            post_item = AIKnowledgeItem(
+                shop_id=shop_id,
+                page_id=page_id,
+                category=KnowledgeCategory.SHOP_FACT,
+                title=f"Facebook post: {post_text[:60].strip()}",
+                content=content,
+                is_pending_approval=False,
+            )
+            db.add(post_item)
+            db.flush()
+            index_knowledge_item(db, post_item)
+            created += 1
+
+        # 2. Always attempt product extraction — even for previously-ingested posts.
+        # The dedup above only guards against duplicate knowledge items; products may
+        # not have been extracted yet (e.g. posts ingested before this feature existed),
+        # or may exist already but be missing a photo/post_link a post can now supply.
+        extracted = extract_products_from_post(post_text)
+        for ep in extracted:
+            pname = (ep.get("name") or "").strip()
+            if not pname:
+                continue
+
+            existing_product = existing_products_by_name.get(pname.casefold())
+            if existing_product is not None:
+                # Backfill only — never overwrite a photo/link the product already has
+                # (which might be a merchant-set one, more deliberate than a post match).
+                backfilled = False
+                if post_photo and not existing_product.photo_url:
+                    existing_product.photo_url = post_photo
+                    backfilled = True
+                if permalink and not existing_product.post_link:
+                    existing_product.post_link = permalink
+                    backfilled = True
+                if backfilled:
+                    db.add(existing_product)
+                    db.flush()
+                    index_product(db, existing_product)
+                    logger.info("Backfilled photo/post_link onto existing product '%s' from FB post", pname)
+                continue
+
+            price_raw = ep.get("price")
+            try:
+                price = float(price_raw) if price_raw is not None else 0.0
+            except (TypeError, ValueError):
+                price = 0.0
+
+            product = Product(
+                shop_id=shop_id,
+                page_id=page_id,
+                name=pname,
+                price=price,
+                description=ep.get("description") or None,
+                category=ep.get("category") or None,
+                # Use the post's attached photo if available, so the product
+                # has a real image from the moment it's created
+                photo_url=post_photo or None,
+                # Store the real FB post permalink so the AI can share it when
+                # a customer asks "send me the post link for this product"
+                post_link=permalink or None,
+                kind="product",
+            )
+            product.variants = [
+                ProductVariant(
+                    attributes={"size": "default"},
+                    stock_qty=0,
+                    reorder_point=2,
+                )
+            ]
+            db.add(product)
+            db.flush()
+            index_product(db, product)
+            products_created += 1
+            existing_products_by_name[pname.casefold()] = product
+            logger.info(
+                "Auto-created product '%s' (price=%.2f) from FB post for shop %s / page %s",
+                pname, price, shop_id, page_id,
+            )
+
     db.commit()
-    return created
+    if products_created:
+        logger.info(
+            "Train-from-posts: %d new knowledge facts, %d new products created for page %s",
+            created, products_created, page_id,
+        )
+
+    # Back-fill photo_url on existing products that were created before this
+    # feature existed (they have a post_link but no photo_url).
+    _backfill_product_photos_from_posts(db, shop_id, page_id, posts)
+
+    return created, products_created
+
+
+def _backfill_product_photos_from_posts(
+    db: Session,
+    shop_id: uuid.UUID,
+    page_id: str,
+    posts: list[str | dict[str, Any]],
+) -> None:
+    """For products that already exist with a post_link but no photo_url,
+    find the matching post in the current batch and copy its photo across."""
+    # Build a map from permalink → photo_url for all posts in this batch
+    link_to_photo: dict[str, str] = {}
+    for post in posts:
+        if not isinstance(post, dict):
+            continue
+        link = (post.get("permalink_url") or "").strip()
+        photo = (post.get("photo_url") or "").strip()
+        if link and photo:
+            link_to_photo[link] = photo
+
+    if not link_to_photo:
+        return
+
+    # Find products for this page that have a post_link but no photo_url
+    products_needing_photo = (
+        db.query(Product)
+        .filter(
+            Product.shop_id == shop_id,
+            Product.page_id == page_id,
+            Product.photo_url.is_(None),
+            Product.post_link.isnot(None),
+        )
+        .all()
+    )
+
+    updated = 0
+    for prod in products_needing_photo:
+        photo = link_to_photo.get(prod.post_link or "")
+        if photo:
+            prod.photo_url = photo
+            db.add(prod)
+            updated += 1
+
+    if updated:
+        db.commit()
+        logger.info("Back-filled photo_url on %d existing product(s) for page %s", updated, page_id)
 
 
 def _normalize_detected_type(raw_type: str | None) -> str:
@@ -426,7 +722,6 @@ def study_and_sync_page_profile(
 
     # 3b. Ingest the Page's own recent posts as searchable facts.
     ingest_page_posts_as_knowledge(db, shop_id, page_id, meta_meta.get("recent_posts") or [])
-
     db.commit()
 
     # 4. If this is a retail page but IT specifically has no products of its own

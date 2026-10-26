@@ -47,6 +47,16 @@ def _channel_identity(channel: ConversationChannel, external_id: str) -> str:
     return f"{prefix}:{external_id}"[:80]
 
 
+_RAW_ID_NAME = re.compile(r"^\d{10,}$")
+
+
+def _is_unresolved_name(name: str | None) -> bool:
+    """True if `name` is empty, or is just the raw numeric platform ID we fall
+    back to when a real display name was never available — i.e. still worth
+    replacing with a real name if one can be resolved."""
+    return not name or bool(_RAW_ID_NAME.match(name))
+
+
 def get_or_create_customer(
     db: Session,
     shop_id: uuid.UUID,
@@ -62,7 +72,7 @@ def get_or_create_customer(
         .first()
     )
     if customer:
-        if name and not customer.name:
+        if name and _is_unresolved_name(customer.name):
             customer.name = name
             db.add(customer)
         return customer
@@ -75,6 +85,37 @@ def get_or_create_customer(
     db.add(customer)
     db.flush()
     return customer
+
+
+def _resolve_facebook_display_name(
+    db: Session,
+    shop_id: uuid.UUID,
+    page_id: str | None,
+    external_user_id: str,
+    channel: ConversationChannel,
+) -> str | None:
+    """Look up the customer's real name via the Graph API when the inbound
+    webhook payload didn't include one (Messenger/Instagram never send a name
+    on the message event itself, only the sender's PSID) — but skip the live
+    API call entirely if we already have a real name on file for them."""
+    if channel not in (ConversationChannel.FACEBOOK, ConversationChannel.INSTAGRAM) or not page_id:
+        return None
+    identity = _channel_identity(channel, external_user_id)
+    existing = db.query(Customer).filter(Customer.shop_id == shop_id, Customer.phone == identity).first()
+    if existing is not None and not _is_unresolved_name(existing.name):
+        return None
+    try:
+        from app.integrations.meta_graph import fetch_messenger_user_name
+        from app.services.channel_outbound import meta_page_credentials
+
+        creds = meta_page_credentials(db, shop_id, page_id=page_id)
+        if creds is None:
+            return None
+        _, token = creds
+        return fetch_messenger_user_name(external_user_id, token)
+    except Exception:
+        logger.warning("Customer display-name resolution failed", exc_info=True)
+        return None
 
 
 def get_or_create_conversation(
@@ -182,6 +223,9 @@ def ingest_inbound_message(
         if shop.auto_hide_phone_numbers_in_comments and PHONE_IN_TEXT.search(text):
             text = PHONE_IN_TEXT.sub("[phone hidden]", text)
 
+    if not name:
+        name = _resolve_facebook_display_name(db, shop_id, page_id, external_user_id, channel)
+
     customer = get_or_create_customer(
         db, shop_id, external_id=external_user_id, channel=channel, name=name
     )
@@ -193,6 +237,15 @@ def ingest_inbound_message(
         db.add(customer)
     if customer.is_blocked:
         return None
+
+    # Fetch the customer's real display name from the Graph API when it's
+    # still unknown — only for Facebook/Instagram DMs where we have a PSID
+    # and a page token. Done inline (not async) but fast-fails on any error
+    # so it never blocks message ingestion.
+    if (
+        not customer.name or re.match(r"^\d{10,}$", customer.name or "")
+    ) and channel in (ConversationChannel.FACEBOOK, ConversationChannel.INSTAGRAM) and page_id:
+        _try_enrich_customer_name(db, customer, external_user_id, page_id, shop_id)
 
     conversation = get_or_create_conversation(db, shop_id, customer, channel)
     if page_id:
@@ -242,6 +295,58 @@ def ingest_inbound_message(
         media_ref=media_ref,
     )
     return message
+
+
+def _try_enrich_customer_name(
+    db: Session,
+    customer: "Customer",
+    psid: str,
+    page_id: str,
+    shop_id: uuid.UUID,
+) -> None:
+    """Fetch the real display name for a Facebook/Instagram user from the Graph
+    API and store it on the Customer record. Silently no-ops on any failure."""
+    try:
+        from app.integrations.meta_graph import fetch_messenger_user_name
+        from app.models.integration import Integration, IntegrationStatus
+
+        # Find a valid page access token for this page
+        token: str | None = None
+        for provider in ("facebook", "instagram"):
+            integ = (
+                db.query(Integration)
+                .filter(
+                    Integration.shop_id == shop_id,
+                    Integration.provider == provider,
+                    Integration.status == IntegrationStatus.CONNECTED,
+                )
+                .first()
+            )
+            if not integ:
+                continue
+            cfg = integ.config or {}
+            # Direct page token
+            if str(cfg.get("page_id") or "") == str(page_id):
+                token = cfg.get("page_access_token")
+                break
+            # Multi-page list
+            for p in cfg.get("pages") or []:
+                if str(p.get("id") or "") == str(page_id):
+                    token = p.get("access_token")
+                    break
+            if token:
+                break
+
+        if not token:
+            return
+
+        real_name = fetch_messenger_user_name(psid, token)
+        if real_name and real_name != psid:
+            customer.name = real_name
+            db.add(customer)
+            logger.info("Resolved FB user %s → name=%r", psid, real_name)
+    except Exception:
+        logger.debug("Customer name enrichment failed", exc_info=True)
 
 
 def _try_hide_meta_comment(db: Session, shop_id: uuid.UUID, comment_id: str) -> None:
@@ -449,6 +554,43 @@ def _find_all_category_photos(
     return result or None
 
 
+MAX_CAROUSEL_CARDS = 10
+
+
+def _find_category_carousel(
+    db: Session, shop: Shop, text: str, page_id: str | None, limit: int = MAX_CAROUSEL_CARDS
+) -> list[dict] | None:
+    """If the message is a category/product browse (e.g. bare "ice cream", not
+    necessarily asking to 'see a photo' in so many words) and it matches 2+
+    real catalog items, build cards for a scrollable product carousel —
+    image, name, price, stock — the same visual browsing experience a proper
+    storefront widget gives, instead of a wall of text. Returns None when
+    there's only 0-1 matches, so the caller falls through to the normal
+    single-item text/photo flow.
+    """
+    from app.services.rag_service import format_money, search_knowledge_and_catalog
+
+    res = search_knowledge_and_catalog(
+        db, shop.id, text, top_k_knowledge=0, top_k_products=limit, page_id=page_id
+    )
+    matches = res.get("products") or []
+    if len(matches) < 2:
+        return None
+
+    currency = shop.currency or "BDT"
+    cards = []
+    for m in matches:
+        product = db.get(Product, m["id"])
+        if product is None:
+            continue
+        stock = sum((v.stock_qty or 0) for v in (product.variants or []))
+        stock_label = "In stock" if stock > 0 else "Out of stock"
+        subtitle = f"{format_money(product.price, currency)} - {stock_label}"
+        cards.append({"name": product.name, "subtitle": subtitle, "photo_url": product.photo_url})
+
+    return cards if len(cards) >= 2 else None
+
+
 def _maybe_ai_auto_reply(
     db: Session,
     shop: Shop,
@@ -602,12 +744,41 @@ def _maybe_ai_auto_reply(
             except Exception:
                 logger.warning("Chat-to-order confirmation check failed", exc_info=True)
 
+        # Category/product browse (e.g. bare "ice cream" matching 2+ catalog items):
+        # send a scrollable card carousel (image/price/stock per item) instead of a
+        # single photo or a wall of text — same as the single-photo block below, the
+        # AI's own text never claims to send anything; this deterministic step does
+        # the actual sending and only the real outcome gets mentioned.
+        carousel_sent = False
+        if is_dm:
+            try:
+                from app.services.channel_outbound import deliver_outbound_carousel
+
+                cards = _find_category_carousel(db, shop, text, page_id)
+                if cards:
+                    carousel_message = Message(
+                        conversation_id=conversation.id,
+                        direction=MessageDirection.OUTBOUND,
+                        type=MessageType.IMAGE,
+                        sent_by_ai=True,
+                    )
+                    db.add(carousel_message)
+                    db.flush()
+                    carousel_result = deliver_outbound_carousel(
+                        db, conversation, cards, message=carousel_message, page_id=page_id
+                    )
+                    if carousel_result.get("delivered"):
+                        carousel_sent = True
+                        reply_text = f"{reply_text}\n\n🛍️ ({len(cards)} options shown above)"
+            except Exception:
+                logger.warning("Product carousel send failed", exc_info=True)
+
         # The AI's own reply text never claims to send a photo (see the system prompt) — only
         # this deterministic step actually attempts it and says what really happened, the same
         # way order confirmation works. That avoids the bot confidently claiming "I'm sending
         # a photo" and then nothing ever arriving if the real send fails.
         photo_sent = False
-        if is_dm:
+        if is_dm and not carousel_sent:
             try:
                 from app.services.channel_outbound import deliver_outbound_image
 

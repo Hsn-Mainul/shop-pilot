@@ -42,12 +42,17 @@ ORDER_EXTRACTION_PROMPT = (
     "'order' to appear — judge intent from the item+quantity+phone+address being given together, "
     "even if an earlier message in the same transcript was just a question (e.g. 'is this available?' "
     "followed by their item/phone/address is a confirmed order, not just browsing).\n\n"
+    "Also extract the customer's own name if they gave one anywhere in the transcript (e.g. 'this is "
+    "Rahim', a name alongside their phone/address, or a name they introduced themselves with) — this is "
+    "optional and must NEVER block order_confirmed if missing; only item, quantity, phone, and address "
+    "are required for that.\n\n"
     "Return STRICT JSON only (no markdown, no backticks):\n"
     "{\n"
     '  "order_confirmed": boolean,\n'
     '  "items": [{"name": "exact item name as mentioned", "quantity": integer}],\n'
     '  "phone": "customer phone number (digits, spaces, + only) or null",\n'
-    '  "address": "delivery address as given, or null"\n'
+    '  "address": "delivery address as given, or null",\n'
+    '  "customer_name": "the customer\'s own name if given, or null"\n'
     "}\n"
     "If ANY of item name, quantity, phone, or address is missing or vague, set 'order_confirmed' to "
     "false. Never invent details that were not actually said."
@@ -171,8 +176,20 @@ def try_confirm_order_from_chat(db: Session, shop: Shop, conversation: Conversat
     items_in = data.get("items") or []
     phone = (data.get("phone") or "").strip()
     address = (data.get("address") or "").strip()
+    customer_name = (data.get("customer_name") or "").strip() or None
     if not items_in or not phone or not address:
         return None
+
+    if customer_name:
+        from app.models.customer import Customer
+
+        customer = db.get(Customer, conversation.customer_id)
+        # Only replace a still-unresolved name (empty, or just the raw platform ID we
+        # fall back to when the customer's real name was never known) — never overwrite
+        # a name that's already real.
+        if customer is not None and (not customer.name or re.match(r"^\d{10,}$", customer.name)):
+            customer.name = customer_name
+            db.add(customer)
 
     order_items: list[OrderItem] = []
     total = 0.0
@@ -212,6 +229,13 @@ def try_confirm_order_from_chat(db: Session, shop: Shop, conversation: Conversat
     db.add(order)
     db.flush()
 
+    # Enrich the Customer record with the real phone number the customer just
+    # gave us — previously the phone field held the internal identity key
+    # (e.g. "fb:246020068522729404") used for dedup, which made the customer
+    # list unreadable. Now that we have a real phone, write it back so the
+    # seller sees an actual contact number instead of a raw FB user ID.
+    _enrich_customer_from_order(db, conversation.customer_id, phone=phone)
+
     currency = shop.currency or "BDT"
     summary = ", ".join(f"{i.quantity}x {i.name_snapshot}" for i in order_items)
     return (
@@ -220,6 +244,50 @@ def try_confirm_order_from_chat(db: Session, shop: Shop, conversation: Conversat
         f"Total: {total:.2f} {currency}\n"
         f"We'll contact you at {phone} and deliver to: {address}. The seller will confirm your order shortly."
     )
+
+
+def _enrich_customer_from_order(
+    db: Session,
+    customer_id: uuid.UUID,
+    phone: str | None = None,
+    name: str | None = None,
+) -> None:
+    """Write real contact info back to the Customer record after a chat order.
+
+    The Customer.phone field starts life as an internal dedup key like
+    "fb:246020068522729404". Once the customer gives us their real phone
+    number during the order flow, replace it so the seller sees a usable
+    contact number on the Customers page.
+    """
+    from app.models.customer import Customer
+
+    customer = db.get(Customer, customer_id)
+    if customer is None:
+        return
+
+    # Replace internal identity keys (fb:xxx, ig:xxx, wa:xxx, tg:xxx) with
+    # the real phone — but ONLY store it in the customer's email field (used
+    # as an overflow contact field) so the phone field (identity dedup key)
+    # is never overwritten, which would break outbound delivery.
+    current_phone = customer.phone or ""
+    _IDENTITY_PREFIX = re.compile(r"^(fb|ig|wa|tg|cmt|wh|ch):", re.I)
+    phone_looks_internal = bool(_IDENTITY_PREFIX.match(current_phone))
+
+    if phone and phone_looks_internal:
+        # Store real phone in email if it's still holding a page: marker or is empty
+        current_email = customer.email or ""
+        email_is_placeholder = not current_email or current_email.startswith("page:") or current_email.startswith("comment:")
+        if email_is_placeholder:
+            customer.email = phone
+            db.add(customer)
+            logger.info(
+                "Stored real phone %r for customer %s in email field (phone field kept as identity key)",
+                phone, customer_id,
+            )
+
+    if name and not customer.name:
+        customer.name = name
+        db.add(customer)
 
 
 # ---------------------------------------------------------------------------

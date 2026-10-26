@@ -123,6 +123,8 @@ export const api = {
       apiFetch<Customer>(`/customers/${id}/block?blocked=${blocked}`, { method: 'PATCH' }),
     recomputeSegments: () =>
       apiFetch<{ updated: number }>('/customers/segments/recompute', { method: 'POST' }),
+    enrichNames: () =>
+      apiFetch<{ updated: number; message: string }>('/customers/enrich-names', { method: 'POST' }),
   },
   reviews: {
     list: (includeHidden = false) =>

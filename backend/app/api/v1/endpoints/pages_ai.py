@@ -31,6 +31,7 @@ from app.schemas.page_ai import (
     PageStudyTriggerRequest,
 )
 from app.services.page_study_service import (
+    extract_products_from_post,
     fetch_meta_page_metadata,
     ingest_page_posts_as_knowledge,
     study_and_sync_page_profile,
@@ -263,17 +264,63 @@ def train_page_from_posts(
 
     meta = fetch_meta_page_metadata(page_id, token, posts_limit=25)
     posts = meta.get("recent_posts") or []
-    created = ingest_page_posts_as_knowledge(db, current_user.shop_id, page_id, posts)
+    facts_created, products_created = ingest_page_posts_as_knowledge(db, current_user.shop_id, page_id, posts)
+
+    if posts:
+        parts = [f"Checked {len(posts)} recent post(s)"]
+        if facts_created:
+            parts.append(f"learned {facts_created} new fact(s)")
+        if products_created:
+            parts.append(f"auto-created {products_created} new product(s) from post listings")
+        message = ", ".join(parts) + "."
+        if not facts_created and not products_created:
+            message = f"Checked {len(posts)} post(s) — all already up to date, nothing new to learn."
+    else:
+        message = (
+            "No posts were returned for this page — check that it has public posts and the "
+            "connection still has a valid access token (try reconnecting it under Integrations)."
+        )
 
     return {
         "fetched_posts": len(posts),
-        "new_facts_learned": created,
-        "message": (
-            f"Checked {len(posts)} recent post(s) and learned {created} new fact(s)."
-            if posts
-            else "No posts were returned for this page — check that it has public posts and the "
-            "connection still has a valid access token (try reconnecting it under Integrations)."
-        ),
+        "new_facts_learned": facts_created,
+        "new_products_created": products_created,
+        "message": message,
+    }
+
+
+@router.post("/{page_id}/debug-extract-products")
+def debug_extract_products_from_post(
+    page_id: str,
+    payload: dict,
+    current_user: TeamMember = Depends(require_role(TeamRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Debug endpoint: test LLM product extraction on a single post caption.
+
+    POST body: {"post_text": "your caption here"}
+
+    Returns the raw LLM response and the parsed products so you can see exactly
+    what the extractor found without triggering a full train-from-posts run.
+    """
+    post_text = (payload.get("post_text") or "").strip()
+    if not post_text:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="post_text is required")
+
+    import logging
+    # Temporarily bump log level to DEBUG so extract_products_from_post logs are visible
+    svc_logger = logging.getLogger("app.services.page_study_service")
+    prev_level = svc_logger.level
+    svc_logger.setLevel(logging.DEBUG)
+
+    products = extract_products_from_post(post_text)
+
+    svc_logger.setLevel(prev_level)
+
+    return {
+        "post_text": post_text,
+        "products_extracted": products,
+        "count": len(products),
     }
 
 

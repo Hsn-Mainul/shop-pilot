@@ -43,6 +43,7 @@ class CallRoutingRuleOut(BaseModel):
 
 class SimulateChatRequest(BaseModel):
     message: str
+    page_id: str | None = None
 
 
 class SimulateChatResponse(BaseModel):

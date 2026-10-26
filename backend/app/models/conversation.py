@@ -59,7 +59,7 @@ class Message(UUIDMixin, TimestampMixin, Base):
     direction: Mapped[MessageDirection] = mapped_column(Enum(MessageDirection))
     type: Mapped[MessageType] = mapped_column(Enum(MessageType), default=MessageType.TEXT)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    audio_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    audio_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The provider's own message id (e.g. Meta's `message.mid`) — webhook providers
     # commonly redeliver the same event at-least-once, and customers sometimes
     # double-send the same attachment; this lets us recognize and skip an exact

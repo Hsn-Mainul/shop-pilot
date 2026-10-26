@@ -26,5 +26,6 @@ class CustomerOut(CustomerBase):
     id: uuid.UUID
     segment: str | None = None
     is_blocked: bool
+    order_count: int = 0
 
     model_config = {"from_attributes": True}

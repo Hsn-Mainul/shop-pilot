@@ -12,6 +12,7 @@ from app.integrations.meta_graph import (
     MetaNotConfiguredError,
     reply_to_comment,
     send_messenger_image,
+    send_messenger_product_carousel,
     send_messenger_text,
 )
 from app.models.conversation import Conversation, ConversationChannel, Message
@@ -35,6 +36,14 @@ def _external_id_from_customer(customer: Customer | None, channel: ConversationC
 
 
 def meta_page_credentials(db: Session, shop_id: uuid.UUID, page_id: str | None = None) -> tuple[str, str] | None:
+    """Resolve the active page ID + access token for a given page_id.
+
+    Provider priority: facebook → instagram → whatsapp.
+    When page_id is provided, ONLY return credentials whose resolved id
+    actually matches — never return a different page's token just because it
+    was the first integration found. Falls back to any connected credentials
+    only when page_id is None (generic / no-page-context sends).
+    """
     for provider in ("facebook", "instagram", "whatsapp"):
         integration = (
             db.query(Integration)
@@ -59,11 +68,13 @@ def meta_page_credentials(db: Session, shop_id: uuid.UUID, page_id: str | None =
                     return str(a["id"]), str(a["page_access_token"])
                 if not page_id and a.get("id") and a.get("page_access_token"):
                     return str(a["id"]), str(a["page_access_token"])
-            # 3. Top-level single page
+            # 3. Top-level single page — ONLY match if the id actually equals the
+            # requested page_id; never return a mismatched page's token.
             pid = cfg.get("page_id") or cfg.get("ig_user_id") or cfg.get("phone_number_id") or ""
             token = cfg.get("page_access_token")
             if pid and token:
-                return str(pid), str(token)
+                if not page_id or str(pid) == str(page_id):
+                    return str(pid), str(token)
     return None
 
 
@@ -265,3 +276,55 @@ def deliver_outbound_image(
     return apply_delivery_to_message(
         message, {"delivered": False, "reason": f"channel_{channel.value}_image_unsupported"}
     )
+
+
+def deliver_outbound_carousel(
+    db: Session,
+    conversation: Conversation,
+    products: list[dict],
+    *,
+    message: Message | None = None,
+    page_id: str | None = None,
+) -> dict:
+    """Send a scrollable multi-product card carousel (image/name/price per
+    card) — Messenger-only for now, since it's Meta's own native template
+    type; other channels fall back to delivered=False so the caller can show
+    a plain text list instead."""
+    if not products:
+        return apply_delivery_to_message(message, {"delivered": False, "reason": "empty"})
+
+    customer = db.get(Customer, conversation.customer_id)
+    recipient = _external_id_from_customer(customer, conversation.channel)
+    channel = conversation.channel
+
+    if channel not in (ConversationChannel.FACEBOOK, ConversationChannel.INSTAGRAM):
+        return apply_delivery_to_message(
+            message, {"delivered": False, "reason": f"channel_{channel.value}_carousel_unsupported"}
+        )
+    if not recipient:
+        return apply_delivery_to_message(message, {"delivered": False, "reason": "no_recipient"})
+
+    resolved_page_id = page_id
+    if not resolved_page_id and customer and customer.email and customer.email.startswith("page:"):
+        resolved_page_id = customer.email.split(":", 1)[1]
+    creds = meta_page_credentials(db, conversation.shop_id, page_id=resolved_page_id)
+    if creds is None and resolved_page_id:
+        creds = meta_page_credentials(db, conversation.shop_id, page_id=None)
+    if creds is None:
+        return apply_delivery_to_message(message, {"delivered": False, "reason": "meta_not_connected"})
+    active_page_id, token = creds
+
+    absolute_products = [
+        {**p, "photo_url": media_absolute_url(p["photo_url"]) if p.get("photo_url") else None}
+        for p in products
+    ]
+    try:
+        mid = send_messenger_product_carousel(active_page_id, token, recipient, absolute_products)
+        return apply_delivery_to_message(
+            message, {"delivered": True, "provider_message_id": mid, "via": "messenger_carousel"}
+        )
+    except MetaNotConfiguredError as exc:
+        return apply_delivery_to_message(message, {"delivered": False, "reason": str(exc)})
+    except Exception as exc:
+        logger.warning("Meta carousel send failed: %s", exc)
+        return apply_delivery_to_message(message, {"delivered": False, "reason": f"meta_error:{exc}"})

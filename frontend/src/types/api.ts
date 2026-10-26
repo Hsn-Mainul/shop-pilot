@@ -178,6 +178,8 @@ export interface OrderItem {
 export interface Order {
   id: string
   customer_id: string
+  customer_name?: string | null
+  invoice_number?: string | null
   status: string
   source_channel: string
   total_amount: number

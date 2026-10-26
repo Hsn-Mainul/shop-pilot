@@ -34,6 +34,8 @@ class OrderStatusUpdate(BaseModel):
 class OrderOut(BaseModel):
     id: uuid.UUID
     customer_id: uuid.UUID
+    customer_name: str | None = None
+    invoice_number: str | None = None
     status: OrderStatus
     source_channel: str | None
     total_amount: Decimal

@@ -308,8 +308,16 @@ def update_product(
     db: Session = Depends(get_db),
 ) -> ProductOut:
     product = _get_owned_product(product_id, current_user, db)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+
+    # SKU lives on the variant, not the product itself — handle it separately
+    sku_value = update_data.pop("sku", None)
+    for field, value in update_data.items():
         setattr(product, field, value)
+
+    if sku_value is not None and product.variants:
+        product.variants[0].sku = sku_value or None
+        db.add(product.variants[0])
     db.add(product)
     db.commit()
     db.refresh(product)

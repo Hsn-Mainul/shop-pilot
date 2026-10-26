@@ -58,6 +58,8 @@ class ProductUpdate(BaseModel):
     scheduling: dict | None = None
     track_serial: bool | None = None
     track_batch: bool | None = None
+    # Setting this writes the SKU to the product's first (default) variant
+    sku: str | None = None
 
 
 class ProductOut(ProductBase):

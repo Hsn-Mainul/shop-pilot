@@ -29,6 +29,7 @@ class KnowledgeItemOut(KnowledgeItemCreate):
 
 class AskRequest(BaseModel):
     question: str
+    page_id: str | None = None
 
 
 class AskResponse(BaseModel):
@@ -54,6 +55,7 @@ class SocialCaptionResponse(BaseModel):
 class RagSearchRequest(BaseModel):
     query: str
     top_k: int = Field(5, ge=1, le=20)
+    page_id: str | None = None
 
 
 class RagSearchKnowledgeItem(BaseModel):

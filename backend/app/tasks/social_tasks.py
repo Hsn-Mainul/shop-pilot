@@ -104,6 +104,7 @@ def publish_social_post_task(self, post_id: str) -> dict:
 
         try:
             photo_refs = [p for p in (post.photo_urls or []) if p]
+            result_id = ""
             if photo_refs:
                 resolved_photos: list[tuple[bytes, str]] = []
                 for photo_ref in photo_refs:
@@ -118,7 +119,7 @@ def publish_social_post_task(self, post_id: str) -> dict:
                 if len(resolved_photos) == 1:
                     photo_bytes, filename = resolved_photos[0]
                     content_type = mimetypes.guess_type(filename)[0] or "image/jpeg"
-                    publish_photo_post(
+                    result_id = publish_photo_post(
                         str(resolved_page_id),
                         str(resolved_token),
                         post.caption or "",
@@ -139,14 +140,36 @@ def publish_social_post_task(self, post_id: str) -> dict:
                                 content_type=content_type,
                             )
                         )
-                    publish_multi_photo_post(
+                    result_id = publish_multi_photo_post(
                         str(resolved_page_id), str(resolved_token), post.caption or "", photo_ids
                     )
             else:
-                publish_feed_post(str(resolved_page_id), str(resolved_token), post.caption or "")
+                result_id = publish_feed_post(str(resolved_page_id), str(resolved_token), post.caption or "")
             post.status = SocialPostStatus.PUBLISHED
             post.published_at = datetime.now(timezone.utc)
             post.error_message = None
+
+            # FR-CAT: if this post is actually selling something, add/update the matching
+            # catalog product — a post that isn't about a product must never create one.
+            try:
+                from app.services.page_study_service import sync_products_from_published_post
+
+                post_link = None
+                if result_id and "_" in result_id:
+                    pid, _, sid = result_id.partition("_")
+                    post_link = f"https://www.facebook.com/{pid}/posts/{sid}"
+                sync_products_from_published_post(
+                    db,
+                    post.shop_id,
+                    post.page_id,
+                    post.caption or "",
+                    photo_url=photo_refs[0] if photo_refs else None,
+                    post_link=post_link,
+                )
+            except Exception:
+                # Catalog sync is a bonus on top of a successful publish — never let it
+                # mark an otherwise-successful post as failed.
+                pass
         except Exception as exc:
             post.status = SocialPostStatus.FAILED
             post.error_message = _simple_error_message(str(exc))

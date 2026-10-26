@@ -30,12 +30,18 @@ def list_orders(
 ) -> list[OrderOut]:
     query = (
         db.query(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.customer))
         .filter(Order.shop_id == current_user.shop_id)
     )
     if status_filter:
         query = query.filter(Order.status == status_filter)
-    return query.order_by(Order.created_at.desc()).all()
+    orders = query.order_by(Order.created_at.desc()).all()
+    results = []
+    for order in orders:
+        out = OrderOut.model_validate(order)
+        out.customer_name = order.customer.name if order.customer else None
+        results.append(out)
+    return results
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)

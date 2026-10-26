@@ -259,8 +259,15 @@ export function SocialStudioPage() {
         setPhotoUrls((prev) => [...prev, res.url])
         uploadedCount += 1
       }
+      // A caption written/generated before this photo was attached won't
+      // mention it — AI Caption only looks at the photo when you click it,
+      // it doesn't re-run automatically when photos change afterward.
       showToast(
-        uploadedCount > 1 ? `${uploadedCount} photos uploaded.` : 'Photo uploaded.',
+        caption
+          ? 'Photo uploaded. Click AI Caption again to update the caption for this photo.'
+          : uploadedCount > 1
+            ? `${uploadedCount} photos uploaded.`
+            : 'Photo uploaded.',
         'success',
       )
     } catch (err) {

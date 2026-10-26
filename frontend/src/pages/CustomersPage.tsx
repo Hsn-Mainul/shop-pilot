@@ -22,6 +22,29 @@ import {
 
 type Tab = 'all' | 'segments' | 'blocked'
 
+// Internal identity key patterns: fb:xxx, ig:xxx, wa:xxx, tg:xxx etc.
+// These are dedup keys, not real phone numbers — show them as channel labels.
+const IDENTITY_RE = /^(fb|ig|wa|tg|cmt|wh|ch):(.+)$/i
+const CHANNEL_LABELS: Record<string, string> = {
+  fb: 'Facebook',
+  ig: 'Instagram',
+  wa: 'WhatsApp',
+  tg: 'Telegram',
+  cmt: 'Comment',
+  wh: 'Webhook',
+  ch: 'Chat',
+}
+
+function parseContact(phone: string | null | undefined, email: string | null | undefined): { real: string | null; channel: string | null } {
+  // email field may hold a real phone number (stored there to preserve the identity key in phone)
+  const emailIsRealPhone = email && !email.startsWith('page:') && !email.startsWith('comment:')
+
+  if (!phone) return { real: emailIsRealPhone ? email : null, channel: null }
+  const m = IDENTITY_RE.exec(phone)
+  if (m) return { real: emailIsRealPhone ? email : null, channel: CHANNEL_LABELS[m[1].toLowerCase()] ?? m[1] }
+  return { real: phone, channel: null }
+}
+
 export function CustomersPage() {
   const { t } = useLocale()
   const qc = useQueryClient()
@@ -86,6 +109,14 @@ export function CustomersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['customers'] }),
   })
 
+  const enrichNames = useMutation({
+    mutationFn: api.customers.enrichNames,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['customers'] })
+      alert(data.message)
+    },
+  })
+
   return (
     <>
       <PageHeader
@@ -94,9 +125,14 @@ export function CustomersPage() {
         actions={
           <div className="row" style={{ gap: '0.5rem' }}>
             {roleAtLeast(role, 'admin') ? (
-              <Button variant="secondary" onClick={() => recompute.mutate()} disabled={recompute.isPending}>
-                Recompute segments
-              </Button>
+              <>
+                <Button variant="secondary" onClick={() => recompute.mutate()} disabled={recompute.isPending}>
+                  Recompute segments
+                </Button>
+                <Button variant="secondary" onClick={() => enrichNames.mutate()} disabled={enrichNames.isPending}>
+                  {enrichNames.isPending ? 'Resolving names…' : 'Resolve FB names'}
+                </Button>
+              </>
             ) : null}
             {roleAtLeast(role, 'sales') ? (
               <Button onClick={() => setShowAddModal(true)}>
@@ -163,36 +199,61 @@ export function CustomersPage() {
                   <th>Name</th>
                   <th>Contact</th>
                   <th>Source</th>
+                  <th>Orders</th>
                   <th>Segment</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <strong>{c.name || shortId(c.id)}</strong>
-                      {c.is_blocked ? <Badge tone="danger">blocked</Badge> : null}
-                    </td>
-                    <td>
-                      {c.phone || '—'}
-                      <div className="muted">{c.email}</div>
-                    </td>
-                    <td>{c.source || '—'}</td>
-                    <td>{c.segment ? statusLabel(c.segment) : '—'}</td>
-                    <td>
-                      {roleAtLeast(role, 'support') ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => setBlockTarget({ id: c.id, blocked: !c.is_blocked })}
-                        >
-                          {c.is_blocked ? 'Unblock' : 'Block'}
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((c) => {
+                  const { real: realPhone, channel } = parseContact(c.phone, c.email)
+                  // Name: use the stored name if it looks real (not a raw FB user ID)
+                  const displayName =
+                    c.name && !/^\d{10,}$/.test(c.name) ? c.name : null
+                  return (
+                    <tr key={c.id}>
+                      <td>
+                        <strong>{displayName ?? <span className="muted">{shortId(c.id)}</span>}</strong>
+                        {c.is_blocked ? <Badge tone="danger">blocked</Badge> : null}
+                        {channel && !displayName ? (
+                          <div className="muted" style={{ fontSize: 12 }}>{channel} user</div>
+                        ) : null}
+                      </td>
+                      <td>
+                        {realPhone ? (
+                          <span>{realPhone}</span>
+                        ) : (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {channel ? `via ${channel}` : '—'}
+                          </span>
+                        )}
+                        {c.email && !c.email.startsWith('page:') && !c.email.startsWith('comment:') ? (
+                          <div className="muted">{c.email}</div>
+                        ) : null}
+                      </td>
+                      <td>{c.source || '—'}</td>
+                      <td>
+                        {(c as any).order_count > 0 ? (
+                          <Badge tone="good">{(c as any).order_count} order{(c as any).order_count > 1 ? 's' : ''}</Badge>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td>{c.segment ? statusLabel(c.segment) : '—'}</td>
+                      <td>
+                        {roleAtLeast(role, 'support') ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setBlockTarget({ id: c.id, blocked: !c.is_blocked })}
+                          >
+                            {c.is_blocked ? 'Unblock' : 'Block'}
+                          </Button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </Table>
           )}

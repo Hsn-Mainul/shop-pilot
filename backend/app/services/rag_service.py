@@ -94,9 +94,11 @@ def prepare_product_text(prod: Product, currency: str | None = None) -> str:
 
     The photo_url and post_link are included so the LLM can share them with the
     customer when they ask to see a product image or its social-media post link.
+    SKUs are included so the AI can match product codes (e.g. UT1001) to items.
     """
     variant_details = []
     total_stock = 0
+    all_skus: list[str] = []
     for v in prod.variants or []:
         stock = v.stock_qty or 0
         total_stock += stock
@@ -106,8 +108,11 @@ def prepare_product_text(prod: Product, currency: str | None = None) -> str:
             variant_details.append(f"{attrs} ({status})")
         else:
             variant_details.append(status)
+        if v.sku:
+            all_skus.append(v.sku)
 
     variants_str = f" | Variants: {'; '.join(variant_details)}" if variant_details else ""
+    sku_str = f" | Product code(s): {', '.join(all_skus)}" if all_skus else ""
     category_str = f" | Category: {prod.category}" if prod.category else ""
     desc_str = f" | Details: {prod.description}" if prod.description else ""
     currency_code = currency or getattr(getattr(prod, "shop", None), "currency", None) or "BDT"
@@ -128,7 +133,7 @@ def prepare_product_text(prod: Product, currency: str | None = None) -> str:
     post_link_str = f" | Post link: {prod.post_link}" if getattr(prod, "post_link", None) else ""
 
     return (
-        f"Product: {prod.name}{category_str} | Price: {price_str}{desc_str}"
+        f"Product: {prod.name}{category_str}{sku_str} | Price: {price_str}{desc_str}"
         f"{variants_str}{discount_str}{photo_str}{post_link_str}"
     ).strip()
 

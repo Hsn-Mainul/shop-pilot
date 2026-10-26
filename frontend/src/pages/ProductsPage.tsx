@@ -26,6 +26,56 @@ import {
 } from '../components/ui/primitives'
 import type { Product } from '../types/api'
 
+// Facebook CDN URLs are proxied through the backend by resolveMediaUrl,
+// so ProductPhoto just renders a normal <img> for all sources.
+function ProductPhoto({
+  url,
+  name,
+  size = 36,
+  style: extraStyle,
+}: {
+  url: string | null | undefined
+  name: string
+  size?: number
+  style?: React.CSSProperties
+}) {
+  const resolved = resolveMediaUrl(url)
+
+  if (!resolved) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size < 80 ? 8 : 10,
+          background: '#f1f5f9',
+          flexShrink: 0,
+          ...extraStyle,
+        }}
+      />
+    )
+  }
+
+  return (
+    <img
+      src={resolved}
+      alt={name}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size < 80 ? 8 : 10,
+        objectFit: 'cover',
+        flexShrink: 0,
+        ...extraStyle,
+      }}
+      onError={(e) => {
+        const img = e.currentTarget
+        img.style.display = 'none'
+      }}
+    />
+  )
+}
+
 export function ProductsPage() {
   const { t } = useLocale()
   const qc = useQueryClient()
@@ -42,6 +92,7 @@ export function ProductsPage() {
   const [description, setDescription] = useState('')
   const [photoUrl, setPhotoUrl] = useState('')
   const [postLink, setPostLink] = useState('')
+  const [sku, setSku] = useState('')
   const [stock, setStock] = useState('10')
   const [pageId, setPageId] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
@@ -65,7 +116,9 @@ export function ProductsPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editPhotoUrl, setEditPhotoUrl] = useState('')
   const [editPostLink, setEditPostLink] = useState('')
+  const [editSku, setEditSku] = useState('')
   const [editPageId, setEditPageId] = useState('')
+  const [editStockDelta, setEditStockDelta] = useState('0')
 
   const shop = useQuery({ queryKey: ['shop'], queryFn: api.shop.me })
   const products = useQuery({
@@ -82,6 +135,7 @@ export function ProductsPage() {
     setDescription('')
     setPhotoUrl('')
     setPostLink('')
+    setSku('')
     setStock('10')
     setPageId('')
   }
@@ -97,7 +151,7 @@ export function ProductsPage() {
         photo_url: photoUrl || undefined,
         post_link: postLink || undefined,
         page_id: pageId || undefined,
-        variants: [{ attributes: { size: 'default' }, stock_qty: Number(stock) || 0, reorder_point: 2 }],
+        variants: [{ sku: sku || undefined, attributes: { size: 'default' }, stock_qty: Number(stock) || 0, reorder_point: 2 }],
       }),
     onSuccess: () => {
       resetAddForm()
@@ -121,7 +175,18 @@ export function ProductsPage() {
         photo_url: editPhotoUrl || null,
         post_link: editPostLink || null,
         page_id: editPageId || null,
+        sku: editSku || null,
       })
+      // Adjust stock on the default variant if the user changed it
+      const delta = Number(editStockDelta)
+      if (delta !== 0 && editingProduct.variants.length > 0) {
+        await api.products.adjustStock({
+          variant_id: editingProduct.variants[0].id,
+          delta_qty: delta,
+          reason: 'stock_count',
+          note: 'Manual adjustment from product edit',
+        })
+      }
     },
     onSuccess: () => {
       setEditingProduct(null)
@@ -200,7 +265,9 @@ export function ProductsPage() {
     setEditDescription(p.description || '')
     setEditPhotoUrl(p.photo_url || '')
     setEditPostLink(p.post_link || '')
+    setEditSku(p.variants[0]?.sku || '')
     setEditPageId(p.page_id || '')
+    setEditStockDelta('0')
   }
 
   function handleCancelEdit() {
@@ -265,23 +332,7 @@ export function ProductsPage() {
                   <tr key={p.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        {p.photo_url ? (
-                          <img
-                            src={resolveMediaUrl(p.photo_url)}
-                            alt={p.name}
-                            style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 36,
-                              height: 36,
-                              borderRadius: 8,
-                              background: '#f1f5f9',
-                              flexShrink: 0,
-                            }}
-                          />
-                        )}
+                        <ProductPhoto url={p.photo_url} name={p.name} size={36} />
                         <div>
                           <strong>{p.name}</strong>
                           {p.description ? <div className="muted">{p.description.slice(0, 60)}</div> : null}
@@ -341,6 +392,7 @@ export function ProductsPage() {
                 src={resolveMediaUrl(previewProduct.photo_url)}
                 alt={previewProduct.name}
                 style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 10 }}
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
               />
             ) : (
               <div
@@ -398,6 +450,17 @@ export function ProductsPage() {
               </p>
             )}
 
+            {previewProduct.post_link ? (
+              <a
+                href={previewProduct.post_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 13, color: '#3b82f6', fontWeight: 500 }}
+              >
+                View Facebook post ↗
+              </a>
+            ) : null}
+
             {canCreate ? (
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                 <Button
@@ -427,6 +490,10 @@ export function ProductsPage() {
           <label className="field-label">
             Price
             <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </label>
+          <label className="field-label">
+            Product code / SKU (e.g. UT1001 — customers can order by this code in chat)
+            <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="e.g. UT1001" />
           </label>
           <label className="field-label">
             Category
@@ -491,6 +558,10 @@ export function ProductsPage() {
             <Input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} />
           </label>
           <label className="field-label">
+            Product code / SKU (e.g. UT1001)
+            <Input value={editSku} onChange={(e) => setEditSku(e.target.value)} placeholder="e.g. UT1001" />
+          </label>
+          <label className="field-label">
             Category
             <Input value={editCategory} onChange={(e) => setEditCategory(e.target.value)} />
           </label>
@@ -522,6 +593,27 @@ export function ProductsPage() {
             Description
             <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
           </label>
+          {(() => {
+            const currentStock = editingProduct?.variants.reduce((s, v) => s + v.stock_qty, 0) ?? 0
+            const delta = Number(editStockDelta) || 0
+            const newStock = currentStock + delta
+            return (
+              <label className="field-label">
+                Adjust stock (+ to add, − to remove)
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Input
+                    type="number"
+                    value={editStockDelta}
+                    onChange={(e) => setEditStockDelta(e.target.value)}
+                    style={{ width: 100 }}
+                  />
+                  <span className="muted" style={{ fontSize: 13 }}>
+                    Current: {currentStock} → New: {newStock < 0 ? 0 : newStock}
+                  </span>
+                </div>
+              </label>
+            )
+          })()}
           {update.isError ? <ErrorBox error={update.error} /> : null}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
             <Button onClick={() => update.mutate()} disabled={!editName || !editPrice || update.isPending}>

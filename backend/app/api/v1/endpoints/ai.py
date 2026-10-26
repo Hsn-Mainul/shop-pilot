@@ -206,7 +206,7 @@ def ask_assistant(
     if not consume_text_credit(db, current_user.shop_id, reason="ai_ask"):
         raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="AI text credits exhausted")
 
-    res = _answer_from_shop_knowledge(db, current_user.shop, payload.question, return_sources=True)
+    res = _answer_from_shop_knowledge(db, current_user.shop, payload.question, return_sources=True, page_id=payload.page_id)
     db.commit()
     answer, used_k, used_p = res  # type: ignore[misc]
     return AskResponse(answer=answer, used_knowledge_item_ids=used_k, used_product_ids=used_p)
@@ -289,7 +289,7 @@ def simulate_chat(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI studio module is off")
     if not consume_text_credit(db, current_user.shop_id, reason="simulate_chat"):
         raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="AI text credits exhausted")
-    reply = _answer_from_shop_knowledge(db, current_user.shop, payload.message)
+    reply = _answer_from_shop_knowledge(db, current_user.shop, payload.message, page_id=payload.page_id)
     db.commit()
     return SimulateChatResponse(reply=str(reply))
 
@@ -417,6 +417,7 @@ def test_rag_search(
         payload.query,
         top_k_knowledge=payload.top_k,
         top_k_products=payload.top_k,
+        page_id=payload.page_id,
     )
     return RagSearchResponse(
         query=payload.query,

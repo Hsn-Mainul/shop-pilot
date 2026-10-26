@@ -230,6 +230,66 @@ def fetch_page_posts_with_photos(page_id: str, page_access_token: str, limit: in
     ]
 
 
+def fetch_messenger_user_name(psid: str, page_access_token: str) -> str | None:
+    """Resolve a Messenger/Instagram sender's real display name from their
+    page-scoped ID — the inbound webhook payload itself never includes a
+    name, only the PSID, so without this a customer only ever shows up as a
+    meaningless numeric ID."""
+    try:
+        resp = httpx.get(
+            f"{settings.meta_graph_base_url}/{psid}",
+            params={"fields": "first_name,last_name", "access_token": page_access_token},
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        name = " ".join(p for p in (data.get("first_name"), data.get("last_name")) if p)
+        return name or None
+    except Exception:
+        return None
+
+
+def send_messenger_product_carousel(
+    page_id: str, page_access_token: str, recipient_id: str, products: list[dict]
+) -> str:
+    """Send a horizontally-scrollable product card carousel (Messenger's native
+    'generic template' attachment) — one card per product with its photo,
+    name, price/stock as the subtitle, so a category search like "ice cream"
+    shows all matching items visually in one message, the same way a proper
+    storefront chat widget does, instead of a plain text list.
+
+    Up to 10 elements per Messenger's own limit for this template type.
+    """
+    elements = []
+    for p in products[:10]:
+        element: dict = {
+            "title": p["name"][:80],
+            "subtitle": p["subtitle"][:80],
+        }
+        if p.get("photo_url"):
+            element["image_url"] = p["photo_url"]
+        elements.append(element)
+
+    response = httpx.post(
+        f"{settings.meta_graph_base_url}/{page_id}/messages",
+        json={
+            "recipient": {"id": recipient_id},
+            "messaging_type": "RESPONSE",
+            "message": {
+                "attachment": {
+                    "type": "template",
+                    "payload": {"template_type": "generic", "elements": elements},
+                }
+            },
+        },
+        params={"access_token": page_access_token},
+        timeout=20.0,
+    )
+    response.raise_for_status()
+    return str(response.json().get("message_id") or response.json().get("id") or "")
+
+
 def send_messenger_image(page_id: str, page_access_token: str, recipient_id: str, image_url: str) -> str:
     """Send an outbound Messenger / Instagram DM image attachment by URL — Meta
     fetches and hosts the image itself, no upload needed on our side.
@@ -352,3 +412,32 @@ def normalize_catalog_item(item: dict) -> dict:
         "description": item.get("description"),
         "photo_url": item.get("image_url") or item.get("image") or None,
     }
+
+
+def fetch_messenger_user_name(psid: str, page_access_token: str) -> str | None:
+    """Fetch the real display name of a Messenger user from the Graph API.
+
+    Uses the Page-Scoped User ID (PSID) which is what Meta sends in webhook
+    `sender.id`. Returns None on any error so callers can fall back gracefully.
+    Requires the page access token (not a user token).
+    """
+    if not psid or not page_access_token:
+        return None
+    try:
+        resp = httpx.get(
+            f"{settings.meta_graph_base_url}/{psid}",
+            params={
+                "access_token": page_access_token,
+                "fields": "name,first_name,last_name",
+            },
+            timeout=8.0,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            name = data.get("name") or (
+                f"{data.get('first_name', '')} {data.get('last_name', '')}".strip()
+            )
+            return name or None
+    except Exception:
+        pass
+    return None
