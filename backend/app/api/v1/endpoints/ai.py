@@ -153,8 +153,27 @@ def _answer_from_shop_knowledge(
         if page_profile:
             include_products = page_profile.include_product_catalog
 
+    # Products/knowledge are saved against the Facebook Page ID they were
+    # trained from, but an inbound Instagram DM's page_id is the Instagram
+    # Business Account ID — a different number. Map it back to the linked
+    # Facebook Page ID so Instagram sees the same catalog Facebook does.
+    catalog_page_id = page_id
+    if page_id:
+        from app.models.integration import Integration
+
+        ig_integration = (
+            db.query(Integration)
+            .filter(Integration.shop_id == shop.id, Integration.provider == "instagram")
+            .first()
+        )
+        if ig_integration:
+            for acct in (ig_integration.config or {}).get("accounts") or []:
+                if str(acct.get("id")) == str(page_id) and acct.get("linked_page_id"):
+                    catalog_page_id = str(acct["linked_page_id"])
+                    break
+
     snippets, used_k_ids, used_p_ids = get_grounded_rag_context(
-        db, shop, message, page_id=page_id, include_products=include_products
+        db, shop, message, page_id=catalog_page_id, include_products=include_products
     )
 
     try:

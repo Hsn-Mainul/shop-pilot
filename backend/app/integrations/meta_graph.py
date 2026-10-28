@@ -77,20 +77,29 @@ def list_pages(user_access_token: str) -> list[dict]:
     )
     response.raise_for_status()
     return response.json().get("data", [])
-def subscribe_page_to_app(page_id: str, page_access_token: str) -> bool:
-    """Subscribes the Page to receive Messenger Webhook notifications for this App."""
+def subscribe_page_to_app(page_id: str, page_access_token: str) -> tuple[bool, str | None]:
+    """Subscribes the Page to receive Messenger/Instagram Webhook notifications for
+    this App. Returns (success, error_detail) — error_detail is Meta's own error
+    message when the subscription call fails, so OAuth callers can log/report why."""
     try:
         response = httpx.post(
             f"{settings.meta_graph_base_url}/{page_id}/subscribed_apps",
             params={
                 "access_token": page_access_token,
-                "subscribed_fields": "messages,messaging_postbacks",
+                "subscribed_fields": "messages,messaging_postbacks,message_reactions",
             },
             timeout=15.0,
         )
-        return response.status_code == 200 and bool(response.json().get("success", False))
-    except Exception:
-        return False
+        if response.status_code == 200 and bool(response.json().get("success", False)):
+            return True, None
+        try:
+            err = response.json().get("error", {})
+            detail = f"({err.get('code')}) {err.get('message') or response.text}"
+        except Exception:
+            detail = response.text
+        return False, detail
+    except Exception as e:
+        return False, str(e)
 
 
 def _check_meta_response(response: httpx.Response, action_name: str) -> dict:
@@ -329,8 +338,8 @@ def send_messenger_image(page_id: str, page_access_token: str, recipient_id: str
         params={"access_token": page_access_token},
         timeout=20.0,
     )
-    response.raise_for_status()
-    return str(response.json().get("message_id") or response.json().get("id") or "")
+    data = _check_meta_response(response, "send_messenger_image")
+    return str(data.get("message_id") or data.get("id") or "")
 
 
 def reply_to_comment(comment_id: str, page_access_token: str, message: str) -> str:

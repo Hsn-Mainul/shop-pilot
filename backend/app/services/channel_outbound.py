@@ -62,12 +62,16 @@ def meta_page_credentials(db: Session, shop_id: uuid.UUID, page_id: str | None =
                     return str(p["id"]), str(p["access_token"])
                 if not page_id and p.get("id") and p.get("access_token"):
                     return str(p["id"]), str(p["access_token"])
-            # 2. Multi-account Instagram list
+            # 2. Multi-account Instagram list. Meta's Send API node is always the
+            # linked Facebook Page ID — even for an Instagram message — not the
+            # Instagram-scoped account id itself; POSTing to .../{ig_id}/messages
+            # fails with "(100) Unsupported request - method type: post".
             for a in cfg.get("accounts") or []:
+                send_node_id = str(a.get("linked_page_id") or a.get("id"))
                 if page_id and str(a.get("id")) == str(page_id) and a.get("page_access_token"):
-                    return str(a["id"]), str(a["page_access_token"])
+                    return send_node_id, str(a["page_access_token"])
                 if not page_id and a.get("id") and a.get("page_access_token"):
-                    return str(a["id"]), str(a["page_access_token"])
+                    return send_node_id, str(a["page_access_token"])
             # 3. Top-level single page — ONLY match if the id actually equals the
             # requested page_id; never return a mismatched page's token.
             pid = cfg.get("page_id") or cfg.get("ig_user_id") or cfg.get("phone_number_id") or ""
@@ -318,6 +322,31 @@ def deliver_outbound_carousel(
         {**p, "photo_url": media_absolute_url(p["photo_url"]) if p.get("photo_url") else None}
         for p in products
     ]
+
+    # Instagram's Send API does not support Messenger's "generic template" card
+    # carousel (it's a Messenger-only attachment type) — sending it there gets
+    # rejected outright. Fall back to a sequence of individual image sends with
+    # a caption each, which Instagram does support, so the browsing experience
+    # still works there instead of silently failing with nothing delivered.
+    if channel == ConversationChannel.INSTAGRAM:
+        sent_any = False
+        last_error: str | None = None
+        for p in absolute_products[:10]:
+            if not p.get("photo_url"):
+                continue
+            try:
+                send_messenger_image(active_page_id, token, recipient, p["photo_url"])
+                send_messenger_text(active_page_id, token, recipient, f"{p['name']} — {p['subtitle']}")
+                sent_any = True
+            except Exception as exc:
+                last_error = str(exc)
+                logger.warning("Instagram per-item carousel image send failed: %s", exc)
+        if sent_any:
+            return apply_delivery_to_message(message, {"delivered": True, "via": "instagram_multi_image"})
+        return apply_delivery_to_message(
+            message, {"delivered": False, "reason": f"meta_error:{last_error or 'no_photos'}"}
+        )
+
     try:
         mid = send_messenger_product_carousel(active_page_id, token, recipient, absolute_products)
         return apply_delivery_to_message(

@@ -262,7 +262,13 @@ def train_page_from_posts(
             detail="This page isn't connected with a valid access token, so its posts can't be fetched.",
         )
 
-    meta = fetch_meta_page_metadata(page_id, token, posts_limit=25)
+    platform = target.get("platform", "facebook") if target else "facebook"
+    if platform == "instagram":
+        from app.services.page_study_service import fetch_instagram_metadata
+
+        meta = fetch_instagram_metadata(page_id, token, posts_limit=25)
+    else:
+        meta = fetch_meta_page_metadata(page_id, token, posts_limit=25)
     posts = meta.get("recent_posts") or []
     raw_post_count = meta.get("raw_post_count") or 0
     facts_created, products_created = ingest_page_posts_as_knowledge(db, current_user.shop_id, page_id, posts)

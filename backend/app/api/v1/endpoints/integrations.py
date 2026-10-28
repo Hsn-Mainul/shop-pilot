@@ -356,7 +356,13 @@ def facebook_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
         pname = p.get("name") or "Facebook Page"
         pcat = p.get("category")
         if pid and ptoken:
-            subscribe_page_to_app(pid, ptoken)
+            ok, err_detail = subscribe_page_to_app(pid, ptoken)
+            if not ok:
+                import logging
+
+                logging.getLogger(__name__).error(
+                    "subscribe_page_to_app failed for page %s (%s): %s", pid, pname, err_detail
+                )
             try:
                 study_and_sync_page_profile(
                     db=db,

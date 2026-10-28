@@ -69,7 +69,10 @@ class Settings(BaseSettings):
 
     # Meta (Facebook/Instagram/WhatsApp) Graph API — used for social publishing and,
     # together with Integration.config, per-Shop OAuth.
-    meta_graph_base_url: str = "https://graph.facebook.com/v19.0"
+    # v19.0 returned "(100) Unsupported request - method type: post" sending an
+    # image to an Instagram-scoped recipient id — the newer Page-linked
+    # Instagram messaging architecture needs a current API version.
+    meta_graph_base_url: str = "https://graph.facebook.com/v23.0"
     meta_app_id: str | None = None
     meta_app_secret: str | None = None
     meta_oauth_redirect_uri: str | None = None

@@ -30,6 +30,84 @@ from app.services.rag_service import index_knowledge_item, index_product
 logger = logging.getLogger(__name__)
 
 
+def fetch_instagram_metadata(
+    ig_user_id: str, page_access_token: str | None, posts_limit: int = 8
+) -> dict[str, Any]:
+    """Fetch profile info & recent media from the Instagram Graph API.
+
+    Instagram Business/Creator accounts don't have a Facebook-style '/feed' edge —
+    posts live under '/media', and profile fields are named differently
+    (biography/username instead of about/bio/description). Using the Facebook
+    page-fetch logic against an IG user ID silently returns nothing useful.
+    """
+    data: dict[str, Any] = {
+        "about": None,
+        "bio": None,
+        "mission": None,
+        "category": None,
+        "website": None,
+        "recent_posts": [],
+        "raw_post_count": 0,
+    }
+
+    if not page_access_token or not ig_user_id:
+        return data
+
+    base_url = settings.meta_graph_base_url.rstrip("/")
+
+    try:
+        resp = httpx.get(
+            f"{base_url}/{ig_user_id}",
+            params={
+                "access_token": page_access_token,
+                "fields": "biography,website,username,name",
+            },
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            p_data = resp.json()
+            data["about"] = p_data.get("biography")
+            data["bio"] = p_data.get("biography")
+            data["website"] = p_data.get("website")
+    except Exception as exc:
+        logger.warning("Failed to fetch Instagram profile from Graph API for %s: %s", ig_user_id, exc)
+
+    try:
+        media_resp = httpx.get(
+            f"{base_url}/{ig_user_id}/media",
+            params={
+                "access_token": page_access_token,
+                "fields": "id,caption,media_type,media_url,permalink,timestamp",
+                "limit": posts_limit,
+            },
+            timeout=10.0,
+        )
+        if media_resp.status_code == 200:
+            items = media_resp.json().get("data", [])
+            data["raw_post_count"] = len(items)
+            result_posts = []
+            for m in items:
+                text = m.get("caption")
+                if not text:
+                    continue
+                photo_url = m.get("media_url") if m.get("media_type") in ("IMAGE", "CAROUSEL_ALBUM") else None
+                result_posts.append({
+                    "message": text,
+                    "permalink_url": m.get("permalink"),
+                    "photo_url": photo_url,
+                })
+            data["recent_posts"] = result_posts
+        else:
+            logger.warning(
+                "Instagram media fetch for %s returned %s: %s",
+                ig_user_id, media_resp.status_code, media_resp.text[:300],
+            )
+    except Exception as exc:
+        logger.warning("Failed to fetch Instagram media for %s: %s", ig_user_id, exc)
+
+    return data
+
+
 def fetch_meta_page_metadata(
     page_id: str, page_access_token: str | None, posts_limit: int = 8
 ) -> dict[str, Any]:
@@ -680,8 +758,12 @@ def study_and_sync_page_profile(
     if category:
         profile.page_category = category
 
-    # 1. Fetch live page data from Meta Graph API
-    meta_meta = fetch_meta_page_metadata(page_id, page_access_token)
+    # 1. Fetch live page data from Meta Graph API (Instagram uses a different
+    # endpoint shape than Facebook Pages — see fetch_instagram_metadata)
+    if platform == "instagram":
+        meta_meta = fetch_instagram_metadata(page_id, page_access_token)
+    else:
+        meta_meta = fetch_meta_page_metadata(page_id, page_access_token)
     profile.about = meta_meta.get("about") or profile.about
     profile.bio = meta_meta.get("bio") or profile.bio
     profile.mission = meta_meta.get("mission") or profile.mission

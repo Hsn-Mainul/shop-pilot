@@ -18,6 +18,7 @@ from app.models.conversation import (
     MessageType,
 )
 from app.models.customer import Customer
+from app.models.integration import Integration
 from app.models.product import Product
 from app.models.shop import Shop
 from app.realtime.hub import hub
@@ -394,6 +395,30 @@ def _recent_conversation_history(db: Session, conversation_id: uuid.UUID, limit:
     return "\n".join(lines)
 
 
+def _resolve_catalog_page_id(db: Session, shop_id: uuid.UUID, page_id: str | None) -> str | None:
+    """Products/knowledge are saved against the Facebook Page ID they were
+    trained/created from, but an inbound Instagram DM's 'page_id' is actually
+    the Instagram Business Account ID (Meta's own recipient.id for IG events)
+    — a different number. Filtering the catalog by that raw IG id finds
+    nothing even though the shop's real catalog matches. Map it back to the
+    linked Facebook Page ID (stored on the 'instagram' integration's
+    `accounts[].linked_page_id`) so Instagram DMs see the same catalog as
+    Facebook Messenger does."""
+    if not page_id:
+        return page_id
+    integration = (
+        db.query(Integration)
+        .filter(Integration.shop_id == shop_id, Integration.provider == "instagram")
+        .first()
+    )
+    if not integration:
+        return page_id
+    for acct in (integration.config or {}).get("accounts") or []:
+        if str(acct.get("id")) == str(page_id) and acct.get("linked_page_id"):
+            return str(acct["linked_page_id"])
+    return page_id
+
+
 _PHOTO_REQUEST_INTENT = re.compile(
     r"(?:photo|picture|\bpic\b|image|"
     r"ছবি|chobi|dekhao|দেখাও|দেখান|"  # Bangla / Banglish
@@ -415,7 +440,8 @@ def _find_requested_product_photo(
     from app.services.rag_service import search_knowledge_and_catalog
 
     res = search_knowledge_and_catalog(
-        db, shop.id, text, top_k_knowledge=0, top_k_products=1, page_id=page_id
+        db, shop.id, text, top_k_knowledge=0, top_k_products=1,
+        page_id=_resolve_catalog_page_id(db, shop.id, page_id),
     )
     products = res.get("products") or []
     if not products:
@@ -537,8 +563,9 @@ def _find_all_category_photos(
     query = db.query(Product).filter(
         Product.shop_id == shop.id, Product.kind == "product", Product.photo_url.isnot(None)
     )
-    if page_id:
-        query = query.filter((Product.page_id == page_id) | (Product.page_id.is_(None)))
+    resolved_page_id = _resolve_catalog_page_id(db, shop.id, page_id)
+    if resolved_page_id:
+        query = query.filter((Product.page_id == resolved_page_id) | (Product.page_id.is_(None)))
     products = query.order_by(Product.category, Product.created_at.desc()).all()
 
     seen_categories: set[str] = set()
@@ -571,9 +598,45 @@ def _find_category_carousel(
     from app.services.rag_service import format_money, search_knowledge_and_catalog
 
     res = search_knowledge_and_catalog(
-        db, shop.id, text, top_k_knowledge=0, top_k_products=limit, page_id=page_id
+        db,
+        shop.id,
+        text,
+        top_k_knowledge=0,
+        top_k_products=limit,
+        page_id=_resolve_catalog_page_id(db, shop.id, page_id),
+        min_similarity=0.45,
     )
     matches = res.get("products") or []
+
+    # Semantic search alone can pull in loosely-related items from the same
+    # general category (e.g. "t-shirt" also matching "Panjabi"/"Jersey" just
+    # because they're all clothing). Prefer matches whose name/category
+    # actually contains one of the query's significant words — fall back to
+    # the raw semantic matches only if that precise filter finds nothing.
+    stop_words = {
+        "show", "me", "the", "photo", "photos", "picture", "pictures", "of",
+        "a", "an", "some", "please", "pic", "pics", "want", "see", "all",
+        "দেখাও", "দেখান", "ছবি", "এর",
+    }
+    query_words = [
+        w.strip(".,!?").lower()
+        for w in text.split()
+        if len(w.strip(".,!?")) > 2 and w.strip(".,!?").lower() not in stop_words
+    ]
+
+    def _matches_query_words(m: dict) -> bool:
+        haystack = f"{m.get('name', '')} {m.get('category', '')}".lower()
+        for w in query_words:
+            stem = w[:-1] if w.endswith("s") and len(w) > 3 else w
+            if stem in haystack:
+                return True
+        return False
+
+    if query_words:
+        precise = [m for m in matches if _matches_query_words(m)]
+        if len(precise) >= 2:
+            matches = precise
+
     if len(matches) < 2:
         return None
 
