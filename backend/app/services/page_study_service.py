@@ -41,6 +41,13 @@ def fetch_meta_page_metadata(
         "category": None,
         "website": None,
         "recent_posts": [],
+        # How many raw feed entries Meta actually returned, before filtering out ones
+        # with no usable text (shares from a personal profile, cover/profile photo
+        # updates, etc. — Meta's API withholds the original content for those even
+        # with a valid page token, a privacy restriction, not a connection problem).
+        # Lets the caller tell "nothing public to see" apart from "fetch failed" or
+        # "recent activity just isn't extractable text" with an accurate message.
+        "raw_post_count": 0,
     }
 
     if not page_access_token or not page_id:
@@ -74,29 +81,43 @@ def fetch_meta_page_metadata(
             f"{base_url}/{page_id}/feed",
             params={
                 "access_token": page_access_token,
-                "fields": "id,message,created_time,permalink_url,attachments{media{image{src}},type}",
+                "fields": "id,message,story,created_time,permalink_url,attachments{media{image{src}},type}",
                 "limit": posts_limit,
             },
             timeout=10.0,
         )
         if feed_resp.status_code == 200:
             posts = feed_resp.json().get("data", [])
+            data["raw_post_count"] = len(posts)
             # Keep the real permalink_url Meta returns for each post plus the first
             # attached photo URL so products auto-created from posts get a photo too.
             result_posts = []
             for p in posts:
-                if not p.get("message"):
-                    continue
-                photo_url: str | None = None
                 attachments = (p.get("attachments") or {}).get("data") or []
+                att_type = (attachments[0].get("type") if attachments else None) or ""
+                photo_url: str | None = None
                 for att in attachments:
                     media = (att.get("media") or {}).get("image") or {}
                     src = media.get("src")
                     if src:
                         photo_url = src
                         break
+
+                text = p.get("message")
+                if not text:
+                    # No caption (not a status update) — a page-owned event like a
+                    # cover/profile photo change is still real, public, trackable
+                    # content (use the auto-generated `story` line as its text).
+                    # A "native_templates" attachment with no real media is Meta's
+                    # placeholder for a personal-profile share it won't expose the
+                    # content of even with a valid page token — nothing to recover.
+                    if att_type != "native_templates" and photo_url and p.get("story"):
+                        text = p["story"]
+                    else:
+                        continue
+
                 result_posts.append({
-                    "message": p.get("message"),
+                    "message": text,
                     "permalink_url": p.get("permalink_url"),
                     "photo_url": photo_url,
                 })

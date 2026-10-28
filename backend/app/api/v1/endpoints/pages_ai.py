@@ -264,6 +264,7 @@ def train_page_from_posts(
 
     meta = fetch_meta_page_metadata(page_id, token, posts_limit=25)
     posts = meta.get("recent_posts") or []
+    raw_post_count = meta.get("raw_post_count") or 0
     facts_created, products_created = ingest_page_posts_as_knowledge(db, current_user.shop_id, page_id, posts)
 
     if posts:
@@ -275,6 +276,24 @@ def train_page_from_posts(
         message = ", ".join(parts) + "."
         if not facts_created and not products_created:
             message = f"Checked {len(posts)} post(s) — all already up to date, nothing new to learn."
+        skipped = raw_post_count - len(posts)
+        if skipped > 0:
+            message += (
+                f" ({skipped} other recent item(s) had no readable text — usually shares from a personal "
+                "profile, which Facebook doesn't expose to the Page's API.)"
+            )
+    elif raw_post_count > 0:
+        # Meta DID return recent activity — it just had no extractable text. This is
+        # usually shares from a personal profile (Facebook withholds the original
+        # content from the Page's API token even when it's visible in the feed UI,
+        # a privacy restriction) or cover/profile photo updates. Reconnecting won't
+        # change this, so don't tell the merchant to do that.
+        message = (
+            f"Checked {raw_post_count} recent item(s), but none had text our side can read — likely "
+            "shares from a personal profile (Facebook doesn't expose that original content to the Page's "
+            "API even when connected correctly) or cover/profile photo changes. Post directly to the Page "
+            "itself with a caption for the AI to learn from it."
+        )
     else:
         message = (
             "No posts were returned for this page — check that it has public posts and the "

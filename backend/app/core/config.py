@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     meta_app_secret: str | None = None
     meta_oauth_redirect_uri: str | None = None
     meta_webhook_verify_token: str | None = None
+    # "Facebook Login for Business" configuration ID — Meta now requires Instagram
+    # messaging permissions (instagram_manage_messages etc.) to be requested through a
+    # named Configuration created in the App Dashboard (Use Cases > Instagram API with
+    # Unified Login > Create new configuration), rather than as plain OAuth scopes.
+    # When set, the connect URL uses config_id instead of a scope list.
+    meta_login_config_id: str | None = None
 
     # Public base URL used to build Twilio TwiML / OAuth callback URLs.
     public_base_url: str = "http://localhost:8001"

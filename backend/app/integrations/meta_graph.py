@@ -24,8 +24,22 @@ def build_authorize_url(state: str) -> str:
         "client_id": settings.meta_app_id,
         "redirect_uri": settings.meta_oauth_redirect_uri,
         "state": state,
-        "scope": "pages_show_list,pages_messaging,instagram_basic,business_management,pages_manage_posts,pages_read_engagement",
     }
+    if settings.meta_login_config_id:
+        # Meta now requires Instagram messaging permissions (instagram_manage_messages,
+        # etc.) to be requested via a named "Facebook Login for Business" Configuration
+        # created in the App Dashboard (Use Cases > Instagram API with Unified Login),
+        # not as plain OAuth scopes — the configuration itself defines which permissions
+        # get requested, so `scope` is omitted entirely when a config_id is set.
+        params["config_id"] = settings.meta_login_config_id
+    else:
+        # Fallback for apps that haven't set up a Login Configuration — works for
+        # Facebook Page permissions, but Meta will reject instagram_manage_messages
+        # here with "Invalid Scopes" until a Configuration exists (see above).
+        params["scope"] = (
+            "pages_show_list,pages_messaging,instagram_basic,business_management,"
+            "pages_manage_posts,pages_read_engagement"
+        )
     return f"https://www.facebook.com/v19.0/dialog/oauth?{urlencode(params)}"
 
 
